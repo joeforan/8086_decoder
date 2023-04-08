@@ -1,56 +1,61 @@
 use std::env::args;
 use std::fs::read;
 
-fn get_reg_str(w: u8,
-               reg_code: u8) -> String
+const REGS_WORD: [&str; 8] = ["al", "cl", "dl", "bl", "ah", "ch", "dh", "bh"];
+const REGS_BYTE: [&str; 8] = ["ax", "cx", "dx", "bx", "sp", "bp", "si", "di"];
+const MOV_OPCODE: u8 = 0x22;
+
+const OPCODE_MASK: u8 = 0x8C;
+const OPCODE_SHFT: u8 = 0x02;
+
+const D_MASK: u8 = 0x02;
+const D_SHFT: u8 = 1;
+
+const W_MASK: u8 = 0x01;
+const W_SHFT: u8 = 0;
+
+const MOD_MASK: u8 = 0xC0;
+const MOD_SHFT: u8 = 6;
+
+const REG_MASK: u8 = 0x38;
+const REG_SHFT: u8 = 3;
+
+const RM_MASK: u8 = 0x07;
+const RM_SHFT: u8 = 0;
+
+fn get_reg_str(flag: u8,
+               code: u8) -> String
 {
     String::from(
-        match w{
-            0 => match reg_code {
-                0b000 => "al",
-                0b001 => "cl",
-                0b010 => "dl",
-                0b011 => "bl",
-                0b100 => "ah",
-                0b101 => "ch",
-                0b110 => "dh",
-                0b111 => "bh",
-                _ => {panic!()}
-            },
-            1 => match reg_code {
-                0b000 => "ax",
-                0b001 => "cx",
-                0b010 => "dx",
-                0b011 => "bx",
-                0b100 => "sp",
-                0b101 => "bp",
-                0b110 => "si",
-                0b111 => "di",
-                _ => {panic!()}
-            },
-            _ => panic!()
+        match flag {
+            0 => REGS_WORD[code as usize],
+            1 => REGS_BYTE[code as usize],
+            _ => {panic!()}
         }
     )
 }
 
-fn parse_mov(d: u8,
-             w: u8,
-             mod_code: u8,
-             reg_code: u8,
-             r_m: u8) -> String
+fn parse_mov(data: &[u8]) -> (usize, String)
 {
-    let reg_string = get_reg_str(w, reg_code);
+    let d_flag = (data[0] & D_MASK) >> D_SHFT;
+    let w_flag = (data[0] & W_MASK) >> W_SHFT;
+    let mod_code = (data[1] & MOD_MASK) >> MOD_SHFT;
+    let reg_code = (data[1] & REG_MASK) >> REG_SHFT;
+    let r_m_code = (data[1] & RM_MASK) >> RM_SHFT;
+
+    let reg_string = get_reg_str(w_flag, reg_code);
     let rm_string = match mod_code {
-        0b11 => get_reg_str(w, r_m),
+        0b11 => get_reg_str(w_flag, r_m_code),
         _ => {panic!()}
     };
-    match d {
-        0 => String::from(format!("mov {}, {}", rm_string, reg_string)),
-        1 => String::from(format!("mov {}, {}", reg_string, rm_string)),
+
+    let offset: usize = 2;
+    match d_flag {
+        0 => (offset, String::from(format!("mov {}, {}", rm_string, reg_string))),
+        1 => (offset, String::from(format!("mov {}, {}", reg_string, rm_string))),
         _ => panic!()
     }
 }
-
 
 fn decode_from_file(filepath: &String) -> String {
     let data = read(filepath).expect(
@@ -65,24 +70,18 @@ fn decode_from_data(data: &[u8]) -> String {
     ret.push_str("bits 16\n\n");
     while i < n {
         let byte = data[i];
-        let opcode = byte & 0xFC;
+        let opcode = (byte & OPCODE_MASK) >> OPCODE_SHFT;
         match opcode {
-            0x88 => {
-                let d = (byte & 0x02) >> 1;
-                let w = byte & 0x01;
-                i = i + 1;
-                let aux = data[i];
-                let mod_code = (aux & 0xC0) >> 6;
-                let reg_code = (aux & 0x38) >> 3;
-                let r_m = aux & 0x07;
-                ret.push_str(&parse_mov(d, w, mod_code, reg_code, r_m));
-                ret.push_str("\n")
+            MOV_OPCODE => {
+                let (offset, code) = parse_mov(&data[i..n]);
+                ret.push_str(&code);
+                ret.push_str("\n");
+                i += offset;
             }
             _ => {
                 println!("Unknown opcode 0x{:x}", opcode)
             }
         };
-        i += 1;
     }
     ret
 }
@@ -103,12 +102,7 @@ mod test {
     #[test]
     fn test_parse_mov() {
         let test_data: [u8; 2] = [0x89, 0xd9];
-        let d = (test_data[0] & 0x02) >> 1;
-        let w = test_data[0] & 0x01;
-        let mc = (test_data[1] & 0xC0) >> 6;
-        let rc = (test_data[1] & 0x38) >> 3;
-        let rm = test_data[1] & 0x07;
-        assert_eq!(parse_mov(d, w, mc, rc, rm), String::from("mov cx, bx"));
+        assert_eq!(parse_mov(&test_data), (2, String::from("mov cx, bx")));
     }
 
     #[test]
