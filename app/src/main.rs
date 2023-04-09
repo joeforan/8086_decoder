@@ -224,6 +224,14 @@ fn decode_from_file(filepath: &String) -> String {
     decode_from_data(&data)
 }
 
+fn is_mov_opcode(opcode: u8) -> bool {
+    ((opcode == MOV_OPCODE) |
+     (opcode == IMM_REG_MOV_OPCODE) |
+     (opcode == IMM_RM_MOV_OPCODE) |
+     (opcode == MEM2ACC_MOV_OPCODE) |
+     (opcode == ACC2MEM_MOV_OPCODE))
+}
+
 fn decode_from_data(data: &[u8]) -> String {
     let n = data.len();
     let mut i = 0;
@@ -233,9 +241,10 @@ fn decode_from_data(data: &[u8]) -> String {
         let byte = data[i];
         let (offset, code): (usize, String) = {
             let opcode = get_opcode(byte);
-            match opcode {
-                IMM_REG_MOV_OPCODE | MOV_OPCODE => parse_mov(opcode, &data[i..n]),
-                _ => panic!("Unknown opcode {} at byte {}", opcode, i)
+            if is_mov_opcode(opcode) {
+                parse_mov(opcode, &data[i..n])
+            } else {
+                panic!("Unknown opcode {} at byte {}", opcode, i)
             }
         };
         ret.push_str(&code);
@@ -314,6 +323,32 @@ mod test {
              mov [bx + di], cx\n\
              mov [bp + si], cl\n\
              mov [bp], ch\n";
+
+        assert_eq!(decode_from_data(&test_data), expected);
+    }
+
+    #[test]
+    fn test_decode_data_3() {
+        let test_data: [u8; 39] = [
+            0x8b, 0x41, 0xdb, 0x89, 0x8c, 0xd4, 0xfe, 0x8b,
+            0x57, 0xe0, 0xc6, 0x03, 0x07, 0xc7, 0x85, 0x85,
+            0x03, 0x5b, 0x01, 0x8b, 0x2e, 0x05, 0x00, 0x8b,
+            0x1e, 0x82, 0x0d, 0xa1, 0xfb, 0x09, 0xa1, 0x10,
+            0x00, 0xa3, 0xfa, 0x09, 0xa3, 0x0f, 0x00];
+
+        let expected =
+            "bits 16\n\n\
+             mov ax, [bx + di - 37]\n\
+             mov [si - 300], cx\n\
+             mov dx, [bx - 32]\n\
+             mov [bp + di], byte 7\n\
+             mov [di + 901], word 347\n\
+             mov bp, [5]\n\
+             mov bx, [3458]\n\
+             mov ax, [2555]\n\
+             mov ax, [16]\n\
+             mov [2554], ax\n\
+             mov [15], ax\n";
 
         assert_eq!(decode_from_data(&test_data), expected);
     }
