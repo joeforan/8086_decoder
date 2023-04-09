@@ -9,18 +9,35 @@ const IMM_REG_MOV_OPCODE: u8 = 0x0B;
 const IMM_RM_MOV_OPCODE: u8 = 0x63;
 const MEM2ACC_MOV_OPCODE: u8 = 0x50;
 //const ACC2MEM_MOV_OPCODE: u8 = 0x51;
+//
+struct OpcodeDecodeOp {
+    opcode: u8,
+    mask: u8,
+    shift: u8
+}
 
-const IMM_RM_MOV_MASK: u8 = 0xFE;
-const IMM_RM_MOV_SHFT: u8 = 1;
-
-const IMMOPCODE_MASK: u8 = 0xF0;
-const IMMOPCODE_SHFT: u8 = 4;
-
-const ACC_MOVOP_MASK: u8 = 0xFE;
-const ACC_MOVOP_SHFT: u8 = 1;
-
-const OPCODE_MASK: u8 = 0xFC;
-const OPCODE_SHFT: u8 = 0x02;
+const OPCODE_DECODE_OPS: [OpcodeDecodeOp; 4] = [
+    OpcodeDecodeOp {
+        opcode: MOV_OPCODE,
+        mask: 0xFC,
+        shift: 2
+    },
+    OpcodeDecodeOp {
+        opcode: IMM_REG_MOV_OPCODE,
+        mask: 0xF0,
+        shift: 4
+    },
+    OpcodeDecodeOp {
+        opcode: IMM_RM_MOV_OPCODE,
+        mask: 0xFE,
+        shift: 1
+    },
+    OpcodeDecodeOp {
+        opcode: MEM2ACC_MOV_OPCODE,
+        mask: 0xFE,
+        shift: 1
+    }
+];
 
 const D_MASK: u8 = 0x02;
 const D_SHFT: u8 = 1;
@@ -57,17 +74,12 @@ fn get_reg_str(flag: u8,
 
 fn get_opcode(byte: u8) -> u8
 {
-    if ((byte & IMMOPCODE_MASK) >> IMMOPCODE_SHFT) == IMM_REG_MOV_OPCODE {
-        IMM_REG_MOV_OPCODE
-    } else if ((byte & OPCODE_MASK) >> OPCODE_SHFT) == MOV_OPCODE {
-        MOV_OPCODE
-    } else if ((byte & IMM_RM_MOV_MASK) >> IMM_RM_MOV_SHFT) == IMM_RM_MOV_OPCODE {
-        IMM_RM_MOV_OPCODE
-    } else if ((byte & ACC_MOVOP_MASK) >> ACC_MOVOP_SHFT) == MEM2ACC_MOV_OPCODE {
-        MEM2ACC_MOV_OPCODE
-    } else {
-        panic!("Unknown opcode {}", byte)
+    for op in OPCODE_DECODE_OPS.iter() {
+        if ((byte & op.mask) >> op.shift) == op.opcode {
+            return op.opcode;
+        }
     }
+    panic!("Unknown opcode {}", byte)
 }
 
 fn read_i16_val(data: &[u8]) -> i16
@@ -115,7 +127,6 @@ fn get_mem_ptr_and_displacement(data: &[u8],
                         let byte_val: i8 = data[2] as i8;
                         if byte_val == 0 {
                             String::from(format!("]"))
-
                         }else if byte_val < 0 {
                             String::from(format!(" - {}]", -byte_val))
                         } else {
