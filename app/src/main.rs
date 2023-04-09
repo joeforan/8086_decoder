@@ -6,8 +6,8 @@ const REGS_BYTE: [&str; 8] = ["ax", "cx", "dx", "bx", "sp", "bp", "si", "di"];
 const MOV_OPCODE: u8 = 0x22;
 const IMMMOV_OPCODE: u8 = 0x0B;
 
-const IMMOPCODE_MASK: u8 = 0xF0;
-const IMMOPCODE_SHFT: u8 = 0x04;
+//const IMMOPCODE_MASK: u8 = 0xF0;
+//const IMMOPCODE_SHFT: u8 = 0x04;
 
 const OPCODE_MASK: u8 = 0xFC;
 const OPCODE_SHFT: u8 = 0x02;
@@ -50,9 +50,50 @@ fn read_i16_val(data: &[u8]) -> i16
     data [0] as i16 | ((data[1] as i16) << 8)
 }
 
+fn get_mem_ptr_and_displacement(data: &[u8],
+                                rm_code: u8,
+                                mod_code: u8) -> (usize, String)
+{
+    let mut data_offset: usize = 0;
+    let mut ret: String = "[".to_owned();
+    if (mod_code == 0b00) && (rm_code == 0b110) {
+        let disp = read_i16_val(&data[2..4]);
+        ret.push_str(&format!("{}]", disp));
+        return (2, ret);
+    }
+    ret.push_str(
+        match rm_code {
+            0b000 => "bx + si",
+            0b001 => "bx + di",
+            0b010 => "bp + si",
+            0b011 => "bp + di",
+            0b100 => "si",
+            0b101 => "di",
+            0b110 => "bp",
+            0b111 => "bx",
+            _ => panic!()
+        }
+    );
+    let suffix: String =
+        match mod_code {
+            0b00 => String::from("]"),
+            0b01 => {
+                data_offset = 1;
+                String::from(format!(" + {}]", data[2]))
+            },
+            0b10 => {
+                data_offset = 2;
+                String::from(format!(" + {}]", read_i16_val(&data[1..3])))
+            }
+            _ => panic!()
+        };
+    ret.push_str(&suffix);
+    (data_offset, ret)
+}
+
 fn parse_mov(opcode: u8, data: &[u8]) -> (usize, String)
 {
-    let offset: usize = 2;
+    let mut offset: usize = 2;
     if opcode == IMMMOV_OPCODE {
         let w_flag = (data[0] & IMMW_MASK) >> IMMW_SHFT;
         let reg_code = (data[0] & IMMREG_MASK) >> IMMREG_SHFT;
@@ -76,9 +117,12 @@ fn parse_mov(opcode: u8, data: &[u8]) -> (usize, String)
     let reg_string = get_reg_str(w_flag, reg_code);
     let rm_string = match mod_code {
         0b11 => get_reg_str(w_flag, r_m_code),
-        _ => {panic!()}
+        _ => {
+            let t = get_mem_ptr_and_displacement(data, r_m_code, mod_code);
+            offset += t.0;
+            t.1
+        }
     };
-
     match d_flag {
         0 => (offset, String::from(format!("mov {}, {}", rm_string, reg_string))),
         1 => (offset, String::from(format!("mov {}, {}", reg_string, rm_string))),
@@ -172,14 +216,27 @@ mod test {
 
     #[test]
     fn test_parse_16bit_imm_mov() {
-        let test_data1: [u8; 3] = [0xb9, 0x0c, 0x00];
-        let test_data2: [u8; 3] = [0xb9, 0xf4, 0xff];
-        let test_data3: [u8; 3] = [0xba, 0x6c, 0x0f];
-        let test_data4: [u8; 3] = [0xba, 0x94, 0xf0];
+        let test_data: [[u8; 3]; 4] = [[0xb9, 0x0c, 0x00],
+                                       [0xb9, 0xf4, 0xff],
+                                       [0xba, 0x6c, 0x0f],
+                                       [0xba, 0x94, 0xf0]];
 
-        assert_eq!(parse_mov(IMMMOV_OPCODE, &test_data1), (3, String::from("mov cx, 12")));
-        assert_eq!(parse_mov(IMMMOV_OPCODE, &test_data2), (3, String::from("mov cx, -12")));
-        assert_eq!(parse_mov(IMMMOV_OPCODE, &test_data3), (3, String::from("mov dx, 3948")));
-        assert_eq!(parse_mov(IMMMOV_OPCODE, &test_data4), (3, String::from("mov dx, -3948")));
+        assert_eq!(parse_mov(IMMMOV_OPCODE, &test_data[0]), (3, String::from("mov cx, 12")));
+        assert_eq!(parse_mov(IMMMOV_OPCODE, &test_data[1]), (3, String::from("mov cx, -12")));
+        assert_eq!(parse_mov(IMMMOV_OPCODE, &test_data[2]), (3, String::from("mov dx, 3948")));
+        assert_eq!(parse_mov(IMMMOV_OPCODE, &test_data[3]), (3, String::from("mov dx, -3948")));
+    }
+
+    #[test]
+    fn test_src_address_calcualtion() {
+        let test_data_w2: [[u8; 2]; 2] = [[0x8a, 0x00],
+                                          [0x8b, 0x1b]];
+//        let test_data_w3: [u8; 3]; = [0x8b, 0x56, 0x00];
+
+
+        assert_eq!(parse_mov(MOV_OPCODE, &test_data_w2[0]), (2, String::from("mov al, [bx + si]")));
+        assert_eq!(parse_mov(MOV_OPCODE, &test_data_w2[1]), (2, String::from("mov bx, [bp + di]")));
+        // assert_eq!(parse_mov(IMMMOV_OPCODE, &test_data[2]), (3, String::from("mov dx, 3948")));
+        // assert_eq!(parse_mov(IMMMOV_OPCODE, &test_data[3]), (3, String::from("mov dx, -3948")));
     }
 }
