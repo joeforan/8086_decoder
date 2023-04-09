@@ -97,11 +97,13 @@ fn get_mem_ptr_and_displacement(data: &[u8],
             },
             0b10 => {
                 data_offset = 2;
-                let data_val = read_u16_val(&data[2..4]);
+                let data_val = read_i16_val(&data[2..4]);
                 if data_val == 0 {
                     String::from(format!("]"))
-                }else {
+                } else if data_val > 0 {
                     String::from(format!(" + {}]", data_val))
+                } else {
+                    String::from(format!(" - {}]", -data_val))
                 }
             }
             _ => panic!()
@@ -310,7 +312,9 @@ mod test {
     #[test]
     fn test_signed_displacements() {
         let test_data_w3: [[u8; 3]; 1] = [[0x8b, 0x41, 0xdb]];
+        let test_data_w4: [[u8; 4]; 1] = [[0x89, 0x8c, 0xd4, 0xfe]];
 
         assert_eq!(parse_mov(MOV_OPCODE, &test_data_w3[0]), (3, String::from("mov ax, [bx + di - 37]")));
+        assert_eq!(parse_mov(MOV_OPCODE, &test_data_w4[0]), (4, String::from("mov [si - 300], cx")));
     }
 }
