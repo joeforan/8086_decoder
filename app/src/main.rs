@@ -79,11 +79,20 @@ fn get_mem_ptr_and_displacement(data: &[u8],
             0b00 => String::from("]"),
             0b01 => {
                 data_offset = 1;
-                String::from(format!(" + {}]", data[2]))
+                if data[2] == 0 {
+                    String::from(format!("]"))
+                } else {
+                    String::from(format!(" + {}]", data[2]))
+                }
             },
             0b10 => {
                 data_offset = 2;
-                String::from(format!(" + {}]", read_i16_val(&data[1..3])))
+                let data_val = read_i16_val(&data[1..3]);
+                if data_val == 0 {
+                    String::from(format!("]"))
+                }else {
+                    String::from(format!(" + {}]", read_i16_val(&data[1..3])))
+                }
             }
             _ => panic!()
         };
@@ -231,12 +240,10 @@ mod test {
     fn test_src_address_calcualtion() {
         let test_data_w2: [[u8; 2]; 2] = [[0x8a, 0x00],
                                           [0x8b, 0x1b]];
-//        let test_data_w3: [u8; 3]; = [0x8b, 0x56, 0x00];
-
+        let test_data_w3: [u8; 3] = [0x8b, 0x56, 0x00];
 
         assert_eq!(parse_mov(MOV_OPCODE, &test_data_w2[0]), (2, String::from("mov al, [bx + si]")));
         assert_eq!(parse_mov(MOV_OPCODE, &test_data_w2[1]), (2, String::from("mov bx, [bp + di]")));
-        // assert_eq!(parse_mov(IMMMOV_OPCODE, &test_data[2]), (3, String::from("mov dx, 3948")));
-        // assert_eq!(parse_mov(IMMMOV_OPCODE, &test_data[3]), (3, String::from("mov dx, -3948")));
+        assert_eq!(parse_mov(MOV_OPCODE, &test_data_w3), (3, String::from("mov dx, [bp]")));
     }
 }
