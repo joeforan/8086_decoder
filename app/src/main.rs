@@ -88,7 +88,10 @@ fn get_mem_ptr_and_displacement(data: &[u8],
                     String::from(format!("]"))
                 } else {
                     let byte_val: i8 = data[2] as i8;
-                    if byte_val < 0 {
+                    if byte_val == 0 {
+                        String::from(format!("]"))
+
+                    }else if byte_val < 0 {
                         String::from(format!(" - {}]", -byte_val))
                     } else {
                         String::from(format!(" + {}]", byte_val))
