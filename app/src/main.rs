@@ -6,8 +6,8 @@ const REGS_BYTE: [&str; 8] = ["ax", "cx", "dx", "bx", "sp", "bp", "si", "di"];
 const MOV_OPCODE: u8 = 0x22;
 const IMMMOV_OPCODE: u8 = 0x0B;
 
-//const IMMOPCODE_MASK: u8 = 0xF0;
-//const IMMOPCODE_SHFT: u8 = 0x04;
+const IMMOPCODE_MASK: u8 = 0xF0;
+const IMMOPCODE_SHFT: u8 = 4;
 
 const OPCODE_MASK: u8 = 0xFC;
 const OPCODE_SHFT: u8 = 0x02;
@@ -157,19 +157,22 @@ fn decode_from_data(data: &[u8]) -> String {
     ret.push_str("bits 16\n\n");
     while i < n {
         let byte = data[i];
-        let opcode = (byte & OPCODE_MASK) >> OPCODE_SHFT;
-        match opcode {
-            MOV_OPCODE => {
-                let (offset, code) = parse_mov(opcode, &data[i..n]);
-                ret.push_str(&code);
-                ret.push_str("\n");
-                i += offset;
-            }
-            _ => {
-                println!("Unknown opcode 0x{:x}", opcode);
-                panic!();
+        let (offset, code): (usize, String) = {
+            let imm_opcode = (byte & IMMOPCODE_MASK) >> IMMOPCODE_SHFT;
+            if imm_opcode == IMMMOV_OPCODE {
+                parse_mov(imm_opcode, &data[i..n])
+            } else {
+                let opcode = (byte & OPCODE_MASK) >> OPCODE_SHFT;
+                if opcode == MOV_OPCODE {
+                    parse_mov(opcode, &data[i..n])
+                } else {
+                    panic!("Unknown opcode 0x{:x} at position {}", byte, i);
+                }
             }
         };
+        ret.push_str(&code);
+        ret.push_str("\n");
+        i += offset;
     }
     ret
 }
@@ -217,6 +220,37 @@ mod test {
     }
 
     #[test]
+    fn test_decode_data_2() {
+        let test_data: [u8; 41] = [
+            0x89, 0xde, 0x88, 0xc6, 0xb1, 0x0c, 0xb5, 0xf4,
+            0xb9, 0x0c, 0x00, 0xb9, 0xf4, 0xff, 0xba, 0x6c,
+            0x0f, 0xba, 0x94, 0xf0, 0x8a, 0x00, 0x8b, 0x1b,
+            0x8b, 0x56, 0x00, 0x8a, 0x60, 0x04, 0x8a, 0x80,
+            0x87, 0x13, 0x89, 0x09, 0x88, 0x0a, 0x88, 0x6e,
+            0x00];
+        let expected =
+            "bits 16\n\n\
+             mov si, bx\n\
+             mov dh, al\n\
+             mov cl, 12\n\
+             mov ch, -12\n\
+             mov cx, 12\n\
+             mov cx, -12\n\
+             mov dx, 3948\n\
+             mov dx, -3948\n\
+             mov al, [bx + si]\n\
+             mov bx, [bp + di]\n\
+             mov dx, [bp]\n\
+             mov ah, [bx + si + 4]\n\
+             mov al, [bx + si + 4999]\n\
+             mov [bx + di], cx\n\
+             mov [bp + si], cl\n\
+             mov [bp], ch\n";
+
+        assert_eq!(decode_from_data(&test_data), expected);
+    }
+
+    #[test]
     fn test_parse_8bit_imm_mov() {
         {
             let test_data: [u8; 2] = [0xb1, 0x0c];
@@ -254,5 +288,17 @@ mod test {
         assert_eq!(parse_mov(MOV_OPCODE, &test_data_w3[0]), (3, String::from("mov dx, [bp]")));
         assert_eq!(parse_mov(MOV_OPCODE, &test_data_w3[1]), (3, String::from("mov ah, [bx + si + 4]")));
         assert_eq!(parse_mov(MOV_OPCODE, &test_data_w4[0]), (4, String::from("mov al, [bx + si + 4999]")));
+    }
+
+    #[test]
+    fn test_dst_address_calcualtion() {
+        let test_data_w2: [[u8; 2]; 2] = [[0x89, 0x09],
+                                          [0x88, 0x0a]];
+        let test_data_w3: [[u8; 3]; 1] = [[0x88, 0x6e, 0x00]];
+
+        assert_eq!(parse_mov(MOV_OPCODE, &test_data_w2[0]), (2, String::from("mov [bx + di], cx")));
+        assert_eq!(parse_mov(MOV_OPCODE, &test_data_w2[1]), (2, String::from("mov [bp + si], cl")));
+        assert_eq!(parse_mov(MOV_OPCODE, &test_data_w3[0]), (3, String::from("mov [bp], ch")));
+
     }
 }
