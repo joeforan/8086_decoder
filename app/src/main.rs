@@ -356,4 +356,15 @@ mod test {
         assert_eq!(parse_mov(get_opcode(test_data_w3[0][0]), &test_data_w3[0]), (3, String::from("mov [bp + di], byte 7")));
         assert_eq!(parse_mov(get_opcode(test_data_w6[0][0]), &test_data_w6[0]), (6, String::from("mov [di + 901], word 347")));
     }
+
+    #[test]
+    fn test_direct_addresses() {
+        let test_data_w4: [[u8; 4]; 2] = [[0x8b, 0x2e, 0x05, 0x00],
+                                          [0x8b, 0x1e, 0x82, 0x0d]];
+
+        assert_eq!(parse_mov(get_opcode(test_data_w4[0][0]), &test_data_w4[0]),
+                   (4, String::from("mov bp, [5]")));
+        assert_eq!(parse_mov(get_opcode(test_data_w4[1][0]), &test_data_w4[1]),
+                   (4, String::from("mov bx, [3458]")));
+    }
 }
