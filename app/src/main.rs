@@ -50,6 +50,11 @@ fn read_i16_val(data: &[u8]) -> i16
     data [0] as i16 | ((data[1] as i16) << 8)
 }
 
+fn read_u16_val(data: &[u8]) -> u16
+{
+    data [0] as u16 | ((data[1] as u16) << 8)
+}
+
 fn get_mem_ptr_and_displacement(data: &[u8],
                                 rm_code: u8,
                                 mod_code: u8) -> (usize, String)
@@ -57,7 +62,7 @@ fn get_mem_ptr_and_displacement(data: &[u8],
     let mut data_offset: usize = 0;
     let mut ret: String = "[".to_owned();
     if (mod_code == 0b00) && (rm_code == 0b110) {
-        let disp = read_i16_val(&data[2..4]);
+        let disp = read_u16_val(&data[2..4]);
         ret.push_str(&format!("{}]", disp));
         return (2, ret);
     }
@@ -87,11 +92,11 @@ fn get_mem_ptr_and_displacement(data: &[u8],
             },
             0b10 => {
                 data_offset = 2;
-                let data_val = read_i16_val(&data[1..3]);
+                let data_val = read_u16_val(&data[2..4]);
                 if data_val == 0 {
                     String::from(format!("]"))
                 }else {
-                    String::from(format!(" + {}]", read_i16_val(&data[1..3])))
+                    String::from(format!(" + {}]", data_val))
                 }
             }
             _ => panic!()
@@ -240,10 +245,14 @@ mod test {
     fn test_src_address_calcualtion() {
         let test_data_w2: [[u8; 2]; 2] = [[0x8a, 0x00],
                                           [0x8b, 0x1b]];
-        let test_data_w3: [u8; 3] = [0x8b, 0x56, 0x00];
+        let test_data_w3: [[u8; 3]; 2] = [[0x8b, 0x56, 0x00],
+                                          [0x8a, 0x60, 0x04]];
+        let test_data_w4: [[u8; 4]; 1] = [[0x8a, 0x80, 0x87, 0x13]];
 
         assert_eq!(parse_mov(MOV_OPCODE, &test_data_w2[0]), (2, String::from("mov al, [bx + si]")));
         assert_eq!(parse_mov(MOV_OPCODE, &test_data_w2[1]), (2, String::from("mov bx, [bp + di]")));
-        assert_eq!(parse_mov(MOV_OPCODE, &test_data_w3), (3, String::from("mov dx, [bp]")));
+        assert_eq!(parse_mov(MOV_OPCODE, &test_data_w3[0]), (3, String::from("mov dx, [bp]")));
+        assert_eq!(parse_mov(MOV_OPCODE, &test_data_w3[1]), (3, String::from("mov ah, [bx + si + 4]")));
+        assert_eq!(parse_mov(MOV_OPCODE, &test_data_w4[0]), (4, String::from("mov al, [bx + si + 4999]")));
     }
 }
