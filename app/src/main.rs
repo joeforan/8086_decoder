@@ -1,17 +1,23 @@
 use std::env::args;
 use std::fs::read;
 
-const REGS_WORD: [&str; 8] = ["al", "cl", "dl", "bl", "ah", "ch", "dh", "bh"];
-const REGS_BYTE: [&str; 8] = ["ax", "cx", "dx", "bx", "sp", "bp", "si", "di"];
+const REGS_BYTE: [&str; 8] = ["al", "cl", "dl", "bl", "ah", "ch", "dh", "bh"];
+const REGS_WORD: [&str; 8] = ["ax", "cx", "dx", "bx", "sp", "bp", "si", "di"];
+
 const MOV_OPCODE: u8 = 0x22;
 const IMM_REG_MOV_OPCODE: u8 = 0x0B;
 const IMM_RM_MOV_OPCODE: u8 = 0x63;
+const MEM2ACC_MOV_OPCODE: u8 = 0x50;
+//const ACC2MEM_MOV_OPCODE: u8 = 0x51;
 
 const IMM_RM_MOV_MASK: u8 = 0xFE;
 const IMM_RM_MOV_SHFT: u8 = 1;
 
 const IMMOPCODE_MASK: u8 = 0xF0;
 const IMMOPCODE_SHFT: u8 = 4;
+
+const ACC_MOVOP_MASK: u8 = 0xFE;
+const ACC_MOVOP_SHFT: u8 = 1;
 
 const OPCODE_MASK: u8 = 0xFC;
 const OPCODE_SHFT: u8 = 0x02;
@@ -42,9 +48,9 @@ fn get_reg_str(flag: u8,
 {
     String::from(
         if flag == 0 {
-            REGS_WORD[code as usize]
-        } else {
             REGS_BYTE[code as usize]
+        } else {
+            REGS_WORD[code as usize]
         }
     )
 }
@@ -57,6 +63,8 @@ fn get_opcode(byte: u8) -> u8
         MOV_OPCODE
     } else if ((byte & IMM_RM_MOV_MASK) >> IMM_RM_MOV_SHFT) == IMM_RM_MOV_OPCODE {
         IMM_RM_MOV_OPCODE
+    } else if ((byte & ACC_MOVOP_MASK) >> ACC_MOVOP_SHFT) == MEM2ACC_MOV_OPCODE {
+        MEM2ACC_MOV_OPCODE
     } else {
         panic!("Unknown opcode {}", byte)
     }
@@ -161,6 +169,11 @@ fn parse_mov(opcode: u8, data: &[u8]) -> (usize, String)
                                                             read_u16_val(&data[data_idx..data_idx+2])))),
             _ => unreachable!()
         }
+    } else if opcode == MEM2ACC_MOV_OPCODE {
+        let w_flag = (data[0] & W_MASK) >> W_SHFT;
+        let reg_string = get_reg_str(w_flag, 0b000);
+        (3, String::from(format!("mov {}, [{}]", reg_string,
+                                 read_u16_val(&data[1..2+w_flag as usize]))))
     } else {
         let d_flag = (data[0] & D_MASK) >> D_SHFT;
         let w_flag = (data[0] & W_MASK) >> W_SHFT;
@@ -366,5 +379,14 @@ mod test {
                    (4, String::from("mov bp, [5]")));
         assert_eq!(parse_mov(get_opcode(test_data_w4[1][0]), &test_data_w4[1]),
                    (4, String::from("mov bx, [3458]")));
+    }
+
+    #[test]
+    fn test_mem_to_acc() {
+        let test_data_w3: [[u8; 3]; 1] = [[0xa1, 0xfb, 0x09]];
+                                          //[0x8b, 0x1e, 0x82, 0x0d]];
+
+        assert_eq!(parse_mov(get_opcode(test_data_w3[0][0]), &test_data_w3[0]),
+                   (3, String::from("mov ax, [2555]")));
     }
 }
