@@ -4,7 +4,7 @@ use std::fs::read;
 const REGS_WORD: [&str; 8] = ["al", "cl", "dl", "bl", "ah", "ch", "dh", "bh"];
 const REGS_BYTE: [&str; 8] = ["ax", "cx", "dx", "bx", "sp", "bp", "si", "di"];
 const MOV_OPCODE: u8 = 0x22;
-const IMMMOV_OPCODE: u8 = 0x0B;
+const IMM_MOV_OPCODE: u8 = 0x0B;
 
 const IMMOPCODE_MASK: u8 = 0xF0;
 const IMMOPCODE_SHFT: u8 = 4;
@@ -47,8 +47,8 @@ fn get_reg_str(flag: u8,
 
 fn get_opcode(byte: u8) -> u8
 {
-    if ((byte & IMMOPCODE_MASK) >> IMMOPCODE_SHFT) == IMMMOV_OPCODE {
-        IMMMOV_OPCODE
+    if ((byte & IMMOPCODE_MASK) >> IMMOPCODE_SHFT) == IMM_MOV_OPCODE {
+        IMM_MOV_OPCODE
     } else if ((byte & OPCODE_MASK) >> OPCODE_SHFT) == MOV_OPCODE {
         MOV_OPCODE
     } else {
@@ -129,7 +129,7 @@ fn get_mem_ptr_and_displacement(data: &[u8],
 fn parse_mov(opcode: u8, data: &[u8]) -> (usize, String)
 {
     let mut offset: usize = 2;
-    if opcode == IMMMOV_OPCODE {
+    if opcode == IMM_MOV_OPCODE {
         let w_flag = (data[0] & IMMW_MASK) >> IMMW_SHFT;
         let reg_code = (data[0] & IMMREG_MASK) >> IMMREG_SHFT;
         let reg_string = get_reg_str(w_flag, reg_code);
@@ -181,7 +181,7 @@ fn decode_from_data(data: &[u8]) -> String {
         let (offset, code): (usize, String) = {
             let opcode = get_opcode(byte);
             match opcode {
-                IMMMOV_OPCODE | MOV_OPCODE => parse_mov(opcode, &data[i..n]),
+                IMM_MOV_OPCODE | MOV_OPCODE => parse_mov(opcode, &data[i..n]),
                 _ => panic!()
             }
         };
@@ -329,7 +329,6 @@ mod test {
     }
 
     #[test]
-    #[ignore]
     fn test_explicit_sizes() {
         let test_data_w3: [[u8; 3]; 1] = [[0xc6, 0x03, 0x07]];
 
