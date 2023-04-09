@@ -8,7 +8,7 @@ const MOV_OPCODE: u8 = 0x22;
 const IMM_REG_MOV_OPCODE: u8 = 0x0B;
 const IMM_RM_MOV_OPCODE: u8 = 0x63;
 const MEM2ACC_MOV_OPCODE: u8 = 0x50;
-//const ACC2MEM_MOV_OPCODE: u8 = 0x51;
+const ACC2MEM_MOV_OPCODE: u8 = 0x51;
 //
 struct OpcodeDecodeOp {
     opcode: u8,
@@ -16,7 +16,7 @@ struct OpcodeDecodeOp {
     shift: u8
 }
 
-const OPCODE_DECODE_OPS: [OpcodeDecodeOp; 4] = [
+const OPCODE_DECODE_OPS: [OpcodeDecodeOp; 5] = [
     OpcodeDecodeOp {
         opcode: MOV_OPCODE,
         mask: 0xFC,
@@ -34,6 +34,11 @@ const OPCODE_DECODE_OPS: [OpcodeDecodeOp; 4] = [
     },
     OpcodeDecodeOp {
         opcode: MEM2ACC_MOV_OPCODE,
+        mask: 0xFE,
+        shift: 1
+    },
+    OpcodeDecodeOp {
+        opcode: ACC2MEM_MOV_OPCODE,
         mask: 0xFE,
         shift: 1
     }
@@ -180,11 +185,15 @@ fn parse_mov(opcode: u8, data: &[u8]) -> (usize, String)
                                                             read_u16_val(&data[data_idx..data_idx+2])))),
             _ => unreachable!()
         }
-    } else if opcode == MEM2ACC_MOV_OPCODE {
+    } else if (opcode == MEM2ACC_MOV_OPCODE) | (opcode == ACC2MEM_MOV_OPCODE) {
         let w_flag = (data[0] & W_MASK) >> W_SHFT;
         let reg_string = get_reg_str(w_flag, 0b000);
-        (3, String::from(format!("mov {}, [{}]", reg_string,
-                                 read_u16_val(&data[1..2+w_flag as usize]))))
+        let val = read_u16_val(&data[1..2+w_flag as usize]);
+        match opcode {
+            MEM2ACC_MOV_OPCODE => (3, String::from(format!("mov {}, [{}]", reg_string, val))),
+            ACC2MEM_MOV_OPCODE => (3, String::from(format!("mov [{}], {}", val, reg_string))),
+            _ => unreachable!()
+        }
     } else {
         let d_flag = (data[0] & D_MASK) >> D_SHFT;
         let w_flag = (data[0] & W_MASK) >> W_SHFT;
@@ -401,5 +410,16 @@ mod test {
                    (3, String::from("mov ax, [2555]")));
         assert_eq!(parse_mov(get_opcode(test_data_w3[1][0]), &test_data_w3[1]),
                    (3, String::from("mov ax, [16]")));
+    }
+
+    #[test]
+    fn test_acc_to_mem() {
+        let test_data_w3: [[u8; 3]; 2] = [[0xa3, 0xfa, 0x09],
+                                          [0xa3, 0x0f, 0x00]];
+
+        assert_eq!(parse_mov(get_opcode(test_data_w3[0][0]), &test_data_w3[0]),
+                   (3, String::from("mov [2554], ax")));
+        assert_eq!(parse_mov(get_opcode(test_data_w3[1][0]), &test_data_w3[1]),
+                   (3, String::from("mov [15], ax")));
     }
 }
