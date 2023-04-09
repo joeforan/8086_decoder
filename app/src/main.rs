@@ -394,10 +394,12 @@ mod test {
 
     #[test]
     fn test_mem_to_acc() {
-        let test_data_w3: [[u8; 3]; 1] = [[0xa1, 0xfb, 0x09]];
-                                          //[0x8b, 0x1e, 0x82, 0x0d]];
+        let test_data_w3: [[u8; 3]; 2] = [[0xa1, 0xfb, 0x09],
+                                          [0xa1, 0x10, 0x00]];
 
         assert_eq!(parse_mov(get_opcode(test_data_w3[0][0]), &test_data_w3[0]),
                    (3, String::from("mov ax, [2555]")));
+        assert_eq!(parse_mov(get_opcode(test_data_w3[1][0]), &test_data_w3[1]),
+                   (3, String::from("mov ax, [16]")));
     }
 }
