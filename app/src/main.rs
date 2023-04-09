@@ -41,10 +41,10 @@ fn get_reg_str(flag: u8,
                code: u8) -> String
 {
     String::from(
-        match flag {
-            0 => REGS_WORD[code as usize],
-            1 => REGS_BYTE[code as usize],
-            _ => {panic!()}
+        if flag == 0 {
+            REGS_WORD[code as usize]
+        } else {
+            REGS_BYTE[code as usize]
         }
     )
 }
@@ -93,7 +93,7 @@ fn get_mem_ptr_and_displacement(data: &[u8],
                 0b101 => "di",
                 0b110 => "bp",
                 0b111 => "bx",
-                _ => panic!()
+                _ => unreachable!()
             }
         );
         let suffix: String =
@@ -126,7 +126,7 @@ fn get_mem_ptr_and_displacement(data: &[u8],
                         String::from(format!(" - {}]", -data_val))
                     }
                 }
-                _ => panic!()
+                _ => unreachable!()
             };
         ret.push_str(&suffix);
         (data_offset, ret)
@@ -146,7 +146,7 @@ fn parse_mov(opcode: u8, data: &[u8]) -> (usize, String)
                 let val: i16 = read_i16_val(&data[1..3]);
                 (offset+1, String::from(format!("mov {}, {}", reg_string, val)))
             },
-            _ => panic!()
+            _ => unreachable!()
         }
     } else if opcode == IMM_RM_MOV_OPCODE {
         let w_flag = (data[0] & W_MASK) >> W_SHFT;
@@ -159,7 +159,7 @@ fn parse_mov(opcode: u8, data: &[u8]) -> (usize, String)
             0 =>  (offset + data_offset + 1, String::from(format!("mov {}, byte {}", reg_string, data[data_idx]))),
             1 =>  (offset + data_offset + 2, String::from(format!("mov {}, word {}", reg_string,
                                                             read_u16_val(&data[data_idx..data_idx+2])))),
-            _ => panic!()
+            _ => unreachable!()
         }
     } else {
         let d_flag = (data[0] & D_MASK) >> D_SHFT;
@@ -180,7 +180,7 @@ fn parse_mov(opcode: u8, data: &[u8]) -> (usize, String)
         match d_flag {
             0 => (offset, String::from(format!("mov {}, {}", rm_string, reg_string))),
             1 => (offset, String::from(format!("mov {}, {}", reg_string, rm_string))),
-            _ => panic!()
+            _ => unreachable!()
         }
     }
 }
@@ -202,7 +202,7 @@ fn decode_from_data(data: &[u8]) -> String {
             let opcode = get_opcode(byte);
             match opcode {
                 IMM_REG_MOV_OPCODE | MOV_OPCODE => parse_mov(opcode, &data[i..n]),
-                _ => panic!()
+                _ => panic!("Unknown opcode {} at byte {}", opcode, i)
             }
         };
         ret.push_str(&code);
