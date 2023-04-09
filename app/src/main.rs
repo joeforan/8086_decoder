@@ -45,6 +45,17 @@ fn get_reg_str(flag: u8,
     )
 }
 
+fn get_opcode(byte: u8) -> u8
+{
+    if ((byte & IMMOPCODE_MASK) >> IMMOPCODE_SHFT) == IMMMOV_OPCODE {
+        IMMMOV_OPCODE
+    } else if ((byte & OPCODE_MASK) >> OPCODE_SHFT) == MOV_OPCODE {
+        MOV_OPCODE
+    } else {
+        panic!("Unknown opcode {}", byte)
+    }
+}
+
 fn read_i16_val(data: &[u8]) -> i16
 {
     data [0] as i16 | ((data[1] as i16) << 8)
@@ -168,16 +179,10 @@ fn decode_from_data(data: &[u8]) -> String {
     while i < n {
         let byte = data[i];
         let (offset, code): (usize, String) = {
-            let imm_opcode = (byte & IMMOPCODE_MASK) >> IMMOPCODE_SHFT;
-            if imm_opcode == IMMMOV_OPCODE {
-                parse_mov(imm_opcode, &data[i..n])
-            } else {
-                let opcode = (byte & OPCODE_MASK) >> OPCODE_SHFT;
-                if opcode == MOV_OPCODE {
-                    parse_mov(opcode, &data[i..n])
-                } else {
-                    panic!("Unknown opcode 0x{:x} at position {}", byte, i);
-                }
+            let opcode = get_opcode(byte);
+            match opcode {
+                IMMMOV_OPCODE | MOV_OPCODE => parse_mov(opcode, &data[i..n]),
+                _ => panic!()
             }
         };
         ret.push_str(&code);
@@ -264,11 +269,11 @@ mod test {
     fn test_parse_8bit_imm_mov() {
         {
             let test_data: [u8; 2] = [0xb1, 0x0c];
-            assert_eq!(parse_mov(IMMMOV_OPCODE, &test_data), (2, String::from("mov cl, 12")));
+            assert_eq!(parse_mov(get_opcode(test_data[0]), &test_data), (2, String::from("mov cl, 12")));
         }
         {
             let test_data: [u8; 2] = [0xb5, 0xf4];
-            assert_eq!(parse_mov(IMMMOV_OPCODE, &test_data), (2, String::from("mov ch, -12")));
+            assert_eq!(parse_mov(get_opcode(test_data[0]), &test_data), (2, String::from("mov ch, -12")));
         }
     }
 
@@ -279,10 +284,10 @@ mod test {
                                        [0xba, 0x6c, 0x0f],
                                        [0xba, 0x94, 0xf0]];
 
-        assert_eq!(parse_mov(IMMMOV_OPCODE, &test_data[0]), (3, String::from("mov cx, 12")));
-        assert_eq!(parse_mov(IMMMOV_OPCODE, &test_data[1]), (3, String::from("mov cx, -12")));
-        assert_eq!(parse_mov(IMMMOV_OPCODE, &test_data[2]), (3, String::from("mov dx, 3948")));
-        assert_eq!(parse_mov(IMMMOV_OPCODE, &test_data[3]), (3, String::from("mov dx, -3948")));
+        assert_eq!(parse_mov(get_opcode(test_data[0][0]), &test_data[0]), (3, String::from("mov cx, 12")));
+        assert_eq!(parse_mov(get_opcode(test_data[1][0]), &test_data[1]), (3, String::from("mov cx, -12")));
+        assert_eq!(parse_mov(get_opcode(test_data[2][0]), &test_data[2]), (3, String::from("mov dx, 3948")));
+        assert_eq!(parse_mov(get_opcode(test_data[3][0]), &test_data[3]), (3, String::from("mov dx, -3948")));
     }
 
     #[test]
@@ -293,11 +298,11 @@ mod test {
                                           [0x8a, 0x60, 0x04]];
         let test_data_w4: [[u8; 4]; 1] = [[0x8a, 0x80, 0x87, 0x13]];
 
-        assert_eq!(parse_mov(MOV_OPCODE, &test_data_w2[0]), (2, String::from("mov al, [bx + si]")));
-        assert_eq!(parse_mov(MOV_OPCODE, &test_data_w2[1]), (2, String::from("mov bx, [bp + di]")));
-        assert_eq!(parse_mov(MOV_OPCODE, &test_data_w3[0]), (3, String::from("mov dx, [bp]")));
-        assert_eq!(parse_mov(MOV_OPCODE, &test_data_w3[1]), (3, String::from("mov ah, [bx + si + 4]")));
-        assert_eq!(parse_mov(MOV_OPCODE, &test_data_w4[0]), (4, String::from("mov al, [bx + si + 4999]")));
+        assert_eq!(parse_mov(get_opcode(test_data_w2[0][0]), &test_data_w2[0]), (2, String::from("mov al, [bx + si]")));
+        assert_eq!(parse_mov(get_opcode(test_data_w2[1][0]), &test_data_w2[1]), (2, String::from("mov bx, [bp + di]")));
+        assert_eq!(parse_mov(get_opcode(test_data_w3[0][0]), &test_data_w3[0]), (3, String::from("mov dx, [bp]")));
+        assert_eq!(parse_mov(get_opcode(test_data_w3[1][0]), &test_data_w3[1]), (3, String::from("mov ah, [bx + si + 4]")));
+        assert_eq!(parse_mov(get_opcode(test_data_w4[0][0]), &test_data_w4[0]), (4, String::from("mov al, [bx + si + 4999]")));
     }
 
     #[test]
@@ -306,9 +311,9 @@ mod test {
                                           [0x88, 0x0a]];
         let test_data_w3: [[u8; 3]; 1] = [[0x88, 0x6e, 0x00]];
 
-        assert_eq!(parse_mov(MOV_OPCODE, &test_data_w2[0]), (2, String::from("mov [bx + di], cx")));
-        assert_eq!(parse_mov(MOV_OPCODE, &test_data_w2[1]), (2, String::from("mov [bp + si], cl")));
-        assert_eq!(parse_mov(MOV_OPCODE, &test_data_w3[0]), (3, String::from("mov [bp], ch")));
+        assert_eq!(parse_mov(get_opcode(test_data_w2[0][0]), &test_data_w2[0]), (2, String::from("mov [bx + di], cx")));
+        assert_eq!(parse_mov(get_opcode(test_data_w2[1][0]), &test_data_w2[1]), (2, String::from("mov [bp + si], cl")));
+        assert_eq!(parse_mov(get_opcode(test_data_w3[0][0]), &test_data_w3[0]), (3, String::from("mov [bp], ch")));
 
     }
 
@@ -318,8 +323,18 @@ mod test {
                                           [0x8b, 0x57, 0xe0]];
         let test_data_w4: [[u8; 4]; 1] = [[0x89, 0x8c, 0xd4, 0xfe]];
 
-        assert_eq!(parse_mov(MOV_OPCODE, &test_data_w3[0]), (3, String::from("mov ax, [bx + di - 37]")));
-        assert_eq!(parse_mov(MOV_OPCODE, &test_data_w3[1]), (3, String::from("mov dx, [bx - 32]")));
-        assert_eq!(parse_mov(MOV_OPCODE, &test_data_w4[0]), (4, String::from("mov [si - 300], cx")));
+        assert_eq!(parse_mov(get_opcode(test_data_w3[0][0]), &test_data_w3[0]), (3, String::from("mov ax, [bx + di - 37]")));
+        assert_eq!(parse_mov(get_opcode(test_data_w3[1][0]), &test_data_w3[1]), (3, String::from("mov dx, [bx - 32]")));
+        assert_eq!(parse_mov(get_opcode(test_data_w4[0][0]), &test_data_w4[0]), (4, String::from("mov [si - 300], cx")));
+    }
+
+    #[test]
+    #[ignore]
+    fn test_explicit_sizes() {
+        let test_data_w3: [[u8; 3]; 1] = [[0xc6, 0x03, 0x07]];
+
+        assert_eq!(parse_mov(get_opcode(test_data_w3[0][0]), &test_data_w3[0]), (3, String::from("mov [bp + di], byte 7")));
+
+
     }
 }
