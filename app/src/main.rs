@@ -4,7 +4,11 @@ use std::fs::read;
 const REGS_WORD: [&str; 8] = ["al", "cl", "dl", "bl", "ah", "ch", "dh", "bh"];
 const REGS_BYTE: [&str; 8] = ["ax", "cx", "dx", "bx", "sp", "bp", "si", "di"];
 const MOV_OPCODE: u8 = 0x22;
-const IMM_MOV_OPCODE: u8 = 0x0B;
+const IMM_REG_MOV_OPCODE: u8 = 0x0B;
+const IMM_RM_MOV_OPCODE: u8 = 0x63;
+
+const IMM_RM_MOV_MASK: u8 = 0xFE;
+const IMM_RM_MOV_SHFT: u8 = 1;
 
 const IMMOPCODE_MASK: u8 = 0xF0;
 const IMMOPCODE_SHFT: u8 = 4;
@@ -47,10 +51,12 @@ fn get_reg_str(flag: u8,
 
 fn get_opcode(byte: u8) -> u8
 {
-    if ((byte & IMMOPCODE_MASK) >> IMMOPCODE_SHFT) == IMM_MOV_OPCODE {
-        IMM_MOV_OPCODE
+    if ((byte & IMMOPCODE_MASK) >> IMMOPCODE_SHFT) == IMM_REG_MOV_OPCODE {
+        IMM_REG_MOV_OPCODE
     } else if ((byte & OPCODE_MASK) >> OPCODE_SHFT) == MOV_OPCODE {
         MOV_OPCODE
+    } else if ((byte & IMM_RM_MOV_MASK) >> IMM_RM_MOV_SHFT) == IMM_RM_MOV_OPCODE {
+        IMM_RM_MOV_OPCODE
     } else {
         panic!("Unknown opcode {}", byte)
     }
@@ -75,65 +81,66 @@ fn get_mem_ptr_and_displacement(data: &[u8],
     if (mod_code == 0b00) && (rm_code == 0b110) {
         let disp = read_u16_val(&data[2..4]);
         ret.push_str(&format!("{}]", disp));
-        return (2, ret);
-    }
-    ret.push_str(
-        match rm_code {
-            0b000 => "bx + si",
-            0b001 => "bx + di",
-            0b010 => "bp + si",
-            0b011 => "bp + di",
-            0b100 => "si",
-            0b101 => "di",
-            0b110 => "bp",
-            0b111 => "bx",
-            _ => panic!()
-        }
-    );
-    let suffix: String =
-        match mod_code {
-            0b00 => String::from("]"),
-            0b01 => {
-                data_offset = 1;
-                if data[2] == 0 {
-                    String::from(format!("]"))
-                } else {
-                    let byte_val: i8 = data[2] as i8;
-                    if byte_val == 0 {
+        (2, ret)
+    } else {
+        ret.push_str(
+            match rm_code {
+                0b000 => "bx + si",
+                0b001 => "bx + di",
+                0b010 => "bp + si",
+                0b011 => "bp + di",
+                0b100 => "si",
+                0b101 => "di",
+                0b110 => "bp",
+                0b111 => "bx",
+                _ => panic!()
+            }
+        );
+        let suffix: String =
+            match mod_code {
+                0b00 => String::from("]"),
+                0b01 => {
+                    data_offset = 1;
+                    if data[2] == 0 {
                         String::from(format!("]"))
-
-                    }else if byte_val < 0 {
-                        String::from(format!(" - {}]", -byte_val))
                     } else {
-                        String::from(format!(" + {}]", byte_val))
+                        let byte_val: i8 = data[2] as i8;
+                        if byte_val == 0 {
+                            String::from(format!("]"))
+
+                        }else if byte_val < 0 {
+                            String::from(format!(" - {}]", -byte_val))
+                        } else {
+                            String::from(format!(" + {}]", byte_val))
+                        }
+                    }
+                },
+                0b10 => {
+                    data_offset = 2;
+                    let data_val = read_i16_val(&data[2..4]);
+                    if data_val == 0 {
+                        String::from(format!("]"))
+                    } else if data_val > 0 {
+                        String::from(format!(" + {}]", data_val))
+                    } else {
+                        String::from(format!(" - {}]", -data_val))
                     }
                 }
-            },
-            0b10 => {
-                data_offset = 2;
-                let data_val = read_i16_val(&data[2..4]);
-                if data_val == 0 {
-                    String::from(format!("]"))
-                } else if data_val > 0 {
-                    String::from(format!(" + {}]", data_val))
-                } else {
-                    String::from(format!(" - {}]", -data_val))
-                }
-            }
-            _ => panic!()
-        };
-    ret.push_str(&suffix);
-    (data_offset, ret)
+                _ => panic!()
+            };
+        ret.push_str(&suffix);
+        (data_offset, ret)
+    }
 }
 
 fn parse_mov(opcode: u8, data: &[u8]) -> (usize, String)
 {
     let mut offset: usize = 2;
-    if opcode == IMM_MOV_OPCODE {
+    if opcode == IMM_REG_MOV_OPCODE {
         let w_flag = (data[0] & IMMW_MASK) >> IMMW_SHFT;
         let reg_code = (data[0] & IMMREG_MASK) >> IMMREG_SHFT;
         let reg_string = get_reg_str(w_flag, reg_code);
-        return match w_flag {
+        match w_flag {
             0 => (offset, String::from(format!("mov {}, {}", reg_string, data[1] as i8))),
             1 => {
                 let val: i16 = read_i16_val(&data[1..3]);
@@ -141,27 +148,46 @@ fn parse_mov(opcode: u8, data: &[u8]) -> (usize, String)
             },
             _ => panic!()
         }
-    }
+    } else if opcode == IMM_RM_MOV_OPCODE {
+        let w_flag = (data[0] & IMMW_MASK) >> IMMW_SHFT;
+        let mod_code = (data[1] & MOD_MASK) >> MOD_SHFT;
+        let r_m_code = (data[1] & RM_MASK) >> RM_SHFT;
+        let (mut data_offset, reg_string) = get_mem_ptr_and_displacement(data, r_m_code, mod_code);
 
-    let d_flag = (data[0] & D_MASK) >> D_SHFT;
-    let w_flag = (data[0] & W_MASK) >> W_SHFT;
-    let mod_code = (data[1] & MOD_MASK) >> MOD_SHFT;
-    let reg_code = (data[1] & REG_MASK) >> REG_SHFT;
-    let r_m_code = (data[1] & RM_MASK) >> RM_SHFT;
-
-    let reg_string = get_reg_str(w_flag, reg_code);
-    let rm_string = match mod_code {
-        0b11 => get_reg_str(w_flag, r_m_code),
-        _ => {
-            let t = get_mem_ptr_and_displacement(data, r_m_code, mod_code);
-            offset += t.0;
-            t.1
+        let data_idx: usize = if (mod_code == 0b01) || (mod_code == 0b10) { 4 } else { 2 };
+        match w_flag {
+            0 => {
+                data_offset += 1;
+                (offset + data_offset, String::from(format!("mov {}, byte {}", reg_string, data[data_idx])))
+            },
+            1 =>   {
+                data_offset += 2;
+                let val: u16 = read_u16_val(&data[data_idx..data_idx+2]);
+                (offset + data_offset, String::from(format!("mov {}, word {}", reg_string, val)))
+            },
+            _ => panic!()
         }
-    };
-    match d_flag {
-        0 => (offset, String::from(format!("mov {}, {}", rm_string, reg_string))),
-        1 => (offset, String::from(format!("mov {}, {}", reg_string, rm_string))),
-        _ => panic!()
+    } else {
+        let d_flag = (data[0] & D_MASK) >> D_SHFT;
+        let w_flag = (data[0] & W_MASK) >> W_SHFT;
+        let mod_code = (data[1] & MOD_MASK) >> MOD_SHFT;
+        let reg_code = (data[1] & REG_MASK) >> REG_SHFT;
+        let r_m_code = (data[1] & RM_MASK) >> RM_SHFT;
+
+        let reg_string = get_reg_str(w_flag, reg_code);
+        let rm_string = match mod_code {
+            0b11 => get_reg_str(w_flag, r_m_code),
+            _ => {
+                let t = get_mem_ptr_and_displacement(data, r_m_code, mod_code);
+                offset += t.0;
+                t.1
+            }
+        };
+        match d_flag {
+            0 => (offset, String::from(format!("mov {}, {}", rm_string, reg_string))),
+            1 => (offset, String::from(format!("mov {}, {}", reg_string, rm_string))),
+            _ => panic!()
+        }
     }
 }
 
@@ -181,7 +207,7 @@ fn decode_from_data(data: &[u8]) -> String {
         let (offset, code): (usize, String) = {
             let opcode = get_opcode(byte);
             match opcode {
-                IMM_MOV_OPCODE | MOV_OPCODE => parse_mov(opcode, &data[i..n]),
+                IMM_REG_MOV_OPCODE | MOV_OPCODE => parse_mov(opcode, &data[i..n]),
                 _ => panic!()
             }
         };
@@ -333,7 +359,5 @@ mod test {
         let test_data_w3: [[u8; 3]; 1] = [[0xc6, 0x03, 0x07]];
 
         assert_eq!(parse_mov(get_opcode(test_data_w3[0][0]), &test_data_w3[0]), (3, String::from("mov [bp + di], byte 7")));
-
-
     }
 }
