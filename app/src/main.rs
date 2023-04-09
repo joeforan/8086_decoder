@@ -314,10 +314,12 @@ mod test {
 
     #[test]
     fn test_signed_displacements() {
-        let test_data_w3: [[u8; 3]; 1] = [[0x8b, 0x41, 0xdb]];
+        let test_data_w3: [[u8; 3]; 2] = [[0x8b, 0x41, 0xdb],
+                                          [0x8b, 0x57, 0xe0]];
         let test_data_w4: [[u8; 4]; 1] = [[0x89, 0x8c, 0xd4, 0xfe]];
 
         assert_eq!(parse_mov(MOV_OPCODE, &test_data_w3[0]), (3, String::from("mov ax, [bx + di - 37]")));
+        assert_eq!(parse_mov(MOV_OPCODE, &test_data_w3[1]), (3, String::from("mov dx, [bx - 32]")));
         assert_eq!(parse_mov(MOV_OPCODE, &test_data_w4[0]), (4, String::from("mov [si - 300], cx")));
     }
 }
