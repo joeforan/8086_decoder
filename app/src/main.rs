@@ -149,22 +149,16 @@ fn parse_mov(opcode: u8, data: &[u8]) -> (usize, String)
             _ => panic!()
         }
     } else if opcode == IMM_RM_MOV_OPCODE {
-        let w_flag = (data[0] & IMMW_MASK) >> IMMW_SHFT;
+        let w_flag = (data[0] & W_MASK) >> W_SHFT;
         let mod_code = (data[1] & MOD_MASK) >> MOD_SHFT;
         let r_m_code = (data[1] & RM_MASK) >> RM_SHFT;
-        let (mut data_offset, reg_string) = get_mem_ptr_and_displacement(data, r_m_code, mod_code);
+        let (data_offset, reg_string) = get_mem_ptr_and_displacement(data, r_m_code, mod_code);
 
         let data_idx: usize = if (mod_code == 0b01) || (mod_code == 0b10) { 4 } else { 2 };
         match w_flag {
-            0 => {
-                data_offset += 1;
-                (offset + data_offset, String::from(format!("mov {}, byte {}", reg_string, data[data_idx])))
-            },
-            1 =>   {
-                data_offset += 2;
-                let val: u16 = read_u16_val(&data[data_idx..data_idx+2]);
-                (offset + data_offset, String::from(format!("mov {}, word {}", reg_string, val)))
-            },
+            0 =>  (offset + data_offset + 1, String::from(format!("mov {}, byte {}", reg_string, data[data_idx]))),
+            1 =>  (offset + data_offset + 2, String::from(format!("mov {}, word {}", reg_string,
+                                                            read_u16_val(&data[data_idx..data_idx+2])))),
             _ => panic!()
         }
     } else {
@@ -357,7 +351,9 @@ mod test {
     #[test]
     fn test_explicit_sizes() {
         let test_data_w3: [[u8; 3]; 1] = [[0xc6, 0x03, 0x07]];
+        let test_data_w6: [[u8; 6]; 1] = [[0xc7, 0x85, 0x85, 0x03, 0x5b, 0x01]];
 
         assert_eq!(parse_mov(get_opcode(test_data_w3[0][0]), &test_data_w3[0]), (3, String::from("mov [bp + di], byte 7")));
+        assert_eq!(parse_mov(get_opcode(test_data_w6[0][0]), &test_data_w6[0]), (6, String::from("mov [di + 901], word 347")));
     }
 }
