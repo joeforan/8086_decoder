@@ -457,4 +457,11 @@ mod test {
         assert_eq!(parse_mov(get_opcode(test_data_w3[1][0]), &test_data_w3[1]),
                    (3, String::from("mov [15], ax")));
     }
+
+    #[test]
+    fn test_add_mem_to_reg () {
+        let test_data_w2: [u8; 2] = [0x03, 0x18];
+        assert_eq!(parse_mov(get_opcode(test_data_w2[0]), &test_data_w2),
+                   (2, String::from("add bx, [bx ]")));
+    }
 }
