@@ -9,6 +9,7 @@ const IMM_REG_MOV_OPCODE: u8 = 0x0B;
 const IMM_RM_MOV_OPCODE: u8 = 0x63;
 const MEM2ACC_MOV_OPCODE: u8 = 0x50;
 const ACC2MEM_MOV_OPCODE: u8 = 0x51;
+const ADD_OPCODE: u8 = 0x00;
 //
 struct OpcodeDecodeOp {
     opcode: u8,
@@ -16,7 +17,7 @@ struct OpcodeDecodeOp {
     shift: u8
 }
 
-const OPCODE_DECODE_OPS: [OpcodeDecodeOp; 5] = [
+const OPCODE_DECODE_OPS: [OpcodeDecodeOp; 6] = [
     OpcodeDecodeOp {
         opcode: MOV_OPCODE,
         mask: 0xFC,
@@ -41,6 +42,11 @@ const OPCODE_DECODE_OPS: [OpcodeDecodeOp; 5] = [
         opcode: ACC2MEM_MOV_OPCODE,
         mask: 0xFE,
         shift: 1
+    },
+    OpcodeDecodeOp {
+        opcode: ADD_OPCODE,
+        mask: 0x78,
+        shift: 3
     }
 ];
 
@@ -157,18 +163,29 @@ fn get_mem_ptr_and_displacement(data: &[u8],
     }
 }
 
+fn get_opcode_mnemonic(opcode: u8) -> String
+{
+    String::from (
+        match opcode {
+            ADD_OPCODE => "add",
+            _ => "mov"
+        }
+    )
+}
+
 fn parse_instruction(opcode: u8, data: &[u8]) -> (usize, String)
 {
     let mut offset: usize = 2;
+    let oc_mnmnc = get_opcode_mnemonic(opcode);
     if opcode == IMM_REG_MOV_OPCODE {
         let w_flag = (data[0] & IMMW_MASK) >> IMMW_SHFT;
         let reg_code = (data[0] & IMMREG_MASK) >> IMMREG_SHFT;
         let reg_string = get_reg_str(w_flag, reg_code);
         match w_flag {
-            0 => (offset, String::from(format!("mov {}, {}", reg_string, data[1] as i8))),
+            0 => (offset, String::from(format!("{} {}, {}", oc_mnmnc, reg_string, data[1] as i8))),
             1 => {
                 let val: i16 = read_i16_val(&data[1..3]);
-                (offset+1, String::from(format!("mov {}, {}", reg_string, val)))
+                (offset+1, String::from(format!("{} {}, {}", oc_mnmnc, reg_string, val)))
             },
             _ => unreachable!()
         }
@@ -180,8 +197,8 @@ fn parse_instruction(opcode: u8, data: &[u8]) -> (usize, String)
 
         let data_idx: usize = if (mod_code == 0b01) || (mod_code == 0b10) { 4 } else { 2 };
         match w_flag {
-            0 =>  (offset + data_offset + 1, String::from(format!("mov {}, byte {}", reg_string, data[data_idx]))),
-            1 =>  (offset + data_offset + 2, String::from(format!("mov {}, word {}", reg_string,
+            0 =>  (offset + data_offset + 1, String::from(format!("{} {}, byte {}", oc_mnmnc, reg_string, data[data_idx]))),
+            1 =>  (offset + data_offset + 2, String::from(format!("{} {}, word {}", oc_mnmnc, reg_string,
                                                             read_u16_val(&data[data_idx..data_idx+2])))),
             _ => unreachable!()
         }
@@ -190,8 +207,8 @@ fn parse_instruction(opcode: u8, data: &[u8]) -> (usize, String)
         let reg_string = get_reg_str(w_flag, 0b000);
         let val = read_u16_val(&data[1..2+w_flag as usize]);
         match opcode {
-            MEM2ACC_MOV_OPCODE => (3, String::from(format!("mov {}, [{}]", reg_string, val))),
-            ACC2MEM_MOV_OPCODE => (3, String::from(format!("mov [{}], {}", val, reg_string))),
+            MEM2ACC_MOV_OPCODE => (3, String::from(format!("{} {}, [{}]", oc_mnmnc, reg_string, val))),
+            ACC2MEM_MOV_OPCODE => (3, String::from(format!("{} [{}], {}", oc_mnmnc, val, reg_string))),
             _ => unreachable!()
         }
     } else {
@@ -211,8 +228,8 @@ fn parse_instruction(opcode: u8, data: &[u8]) -> (usize, String)
             }
         };
         match d_flag {
-            0 => (offset, String::from(format!("mov {}, {}", rm_string, reg_string))),
-            1 => (offset, String::from(format!("mov {}, {}", reg_string, rm_string))),
+            0 => (offset, String::from(format!("{} {}, {}", oc_mnmnc, rm_string, reg_string))),
+            1 => (offset, String::from(format!("{} {}, {}", oc_mnmnc, reg_string, rm_string))),
             _ => unreachable!()
         }
     }
@@ -229,7 +246,9 @@ fn is_known_opcode(opcode: u8) -> bool {
      (opcode == IMM_REG_MOV_OPCODE) |
      (opcode == IMM_RM_MOV_OPCODE) |
      (opcode == MEM2ACC_MOV_OPCODE) |
-     (opcode == ACC2MEM_MOV_OPCODE))
+     (opcode == ACC2MEM_MOV_OPCODE) |
+     (opcode == ADD_OPCODE)
+    )
 }
 
 fn decode_from_data(data: &[u8]) -> String {
@@ -456,5 +475,13 @@ mod test {
                    (3, String::from("mov [2554], ax")));
         assert_eq!(parse_instruction(get_opcode(test_data_w3[1][0]), &test_data_w3[1]),
                    (3, String::from("mov [15], ax")));
+    }
+
+    #[test]
+    fn test_add_mem_to_reg () {
+        let test_data_w2: [[u8; 2];1] = [[0x03, 0x18]];
+                                         //[0x03, 0x5]
+        assert_eq!(parse_instruction(get_opcode(test_data_w2[0][0]), &test_data_w2[0]),
+                   (2, String::from("add bx, [bx + si]")));
     }
 }
