@@ -557,8 +557,11 @@ mod test {
     #[test]
     fn test_add_instructions_4 () {
         let test_data_w3: [[u8; 3]; 1] = [[0x80, 0x07, 0x22]];
+        let test_data_w6: [[u8; 5]; 1] = [[0x83, 0x82, 0xe8, 0x03, 0x1d]];
 
         assert_eq!(parse_instruction(get_opcode(test_data_w3[0][0]), &test_data_w3[0]),
                    (3, String::from("add byte [bx], 34")));
+        assert_eq!(parse_instruction(get_opcode(test_data_w6[0][0]), &test_data_w6[0]),
+                   (5, String::from("add word [bp + si + 1000], 29")));
     }
 }
