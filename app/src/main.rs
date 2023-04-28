@@ -1,18 +1,6 @@
 use std::env::args;
 use std::fs::read;
 
-const REGS_BYTE: [&str; 8] = ["al", "cl", "dl", "bl", "ah", "ch", "dh", "bh"];
-const REGS_WORD: [&str; 8] = ["ax", "cx", "dx", "bx", "sp", "bp", "si", "di"];
-
-const MOV_OPCODE: u8 = 0x88;
-const IMM_REG_MOV_OPCODE: u8 = 0xB0;
-const IMM_RM_MOV_OPCODE: u8 = 0xc6;
-const MEM2ACC_MOV_OPCODE: u8 = 0xA0;
-const ACC2MEM_MOV_OPCODE: u8 = 0xA2;
-const ADD_OPCODE: u8 = 0x00;
-const IMM_RM_ADD_OPCODE: u8 = 0x80;
-const IMM_ACC_ADD_OPCODE: u8 = 0x04;
-
 enum OpcodeType
 {
     RegMov,
@@ -21,45 +9,38 @@ enum OpcodeType
     Standard
 }
 
-struct OpcodeDecodeOp {
-    opcode: u8,
-    mask: u8,
+#[derive(PartialEq, Clone, Copy)]
+enum Opcode {
+    MovStd,
+    MovReg,
+    MovRm,
+    MovMem2Acc,
+    MovAcc2Mem,
+    AddStd,
+    AddRm,
+    AddAcc,
+    SubStd,
+    SubRm
 }
 
-const OPCODE_DECODE_OPS: [OpcodeDecodeOp; 8] = [
-    OpcodeDecodeOp {
-        opcode: MOV_OPCODE,
-        mask: 0xFC,
-    },
-    OpcodeDecodeOp {
-        opcode: IMM_REG_MOV_OPCODE,
-        mask: 0xF0,
-    },
-    OpcodeDecodeOp {
-        opcode: IMM_RM_MOV_OPCODE,
-        mask: 0xFE,
-    },
-    OpcodeDecodeOp {
-        opcode: MEM2ACC_MOV_OPCODE,
-        mask: 0xFE,
-    },
-    OpcodeDecodeOp {
-        opcode: ACC2MEM_MOV_OPCODE,
-        mask: 0xFE,
-    },
-    OpcodeDecodeOp {
-        opcode: ADD_OPCODE,
-        mask: 0xFC,
-    },
-    OpcodeDecodeOp {
-        opcode: IMM_RM_ADD_OPCODE,
-        mask: 0xFC,
-    },
-    OpcodeDecodeOp {
-        opcode: IMM_ACC_ADD_OPCODE,
-        mask: 0xFC,
-    }
-];
+#[derive(PartialEq, Clone, Copy)]
+enum BitValue{
+    BV0 = 0,
+    BV1 = 1
+}
+
+#[derive(PartialEq, Clone, Copy)]
+enum TwoBitValue{
+    TBV00 = 0b00,
+    TBV01 = 0b01,
+    TBV10 = 0b10,
+    TBV11 = 0b11
+}
+
+const NO_OPCODES: usize = 10;
+
+const REGS_BYTE: [&str; 8] = ["al", "cl", "dl", "bl", "ah", "ch", "dh", "bh"];
+const REGS_WORD: [&str; 8] = ["ax", "cx", "dx", "bx", "sp", "bp", "si", "di"];
 
 const D_MASK: u8 = 0x02;
 const D_SHFT: u8 = 1;
@@ -85,26 +66,101 @@ const IMMREG_SHFT: u8 = 0;
 const RM_MASK: u8 = 0x07;
 const RM_SHFT: u8 = 0;
 
-fn get_reg_str(flag: u8,
-               code: u8) -> String
+
+fn get_opcode_mnemonic(opcode: Opcode) -> String
 {
-    String::from(
-        if flag == 0 {
-            REGS_BYTE[code as usize]
-        } else {
-            REGS_WORD[code as usize]
+    use Opcode::*;
+    String::from (
+        match opcode {
+            AddStd | AddRm | AddAcc => "add",
+
+            SubStd |
+            SubRm => "sub",
+
+            MovStd |
+            MovReg |
+            MovRm |
+            MovMem2Acc |
+            MovAcc2Mem  => "mov"
         }
     )
 }
 
-fn get_opcode(byte: u8) -> u8
-{
-    for op in OPCODE_DECODE_OPS.iter() {
-        if (byte & op.mask) == op.opcode {
-            return op.opcode;
+fn get_opcode_type(opcode: Opcode) -> OpcodeType {
+    use Opcode::*;
+    match opcode {
+        MovReg => OpcodeType::RegMov,
+
+        MovRm |
+        AddRm |
+        SubRm => OpcodeType::Rm,
+
+        MovMem2Acc |
+        MovAcc2Mem |
+        AddAcc => OpcodeType::Acc,
+
+        MovStd |
+        AddStd |
+        SubStd => OpcodeType::Standard,
+    }
+}
+
+fn get_opcode(data: &[u8]) -> Opcode {
+    use Opcode::*;
+    const LUT: [(u8, u8, u8, u8, Opcode); NO_OPCODES] = [
+        (0x88, 0xFC, 0, 0, MovStd),
+        (0xB0, 0xF0, 0, 0, MovReg),
+        (0xc6, 0xFE, 0, 0, MovRm),
+        (0xA0, 0xFE, 0, 0, MovMem2Acc),
+        (0xA2, 0xFE, 0, 0, MovAcc2Mem),
+        (0x00, 0xFC, 0, 0, AddStd),
+        (0x80, 0xFC, 0, 0x38, AddRm),
+        (0x04, 0xFC, 0, 0, AddAcc),
+        (0x28, 0xFC, 0, 0, SubStd),
+        (0x80, 0xFC, 0x28, 0x38, SubRm)];
+
+    for t in LUT.iter() {
+        if t.3 != 0 {
+            if ((data[0] & t.1) == t.0) & ((data[1] & t.3) == t.2) {
+                return t.4
+            }
+        } else if (data[0] & t.1) == t.0 {
+            return t.4
         }
     }
-    panic!("Unknown opcode {}", byte)
+    panic!("Unknown opcode {}", data[0])
+}
+
+fn get_bit_value(b: u8) -> BitValue {
+    if (b & 0x1) == 0 {
+        BitValue::BV0
+    } else {
+        BitValue::BV1
+    }
+}
+
+fn get_two_bit_value(b: u8) -> TwoBitValue {
+    let tb = b & 0x3;
+    if tb == 0 {
+        TwoBitValue::TBV00
+    } else if tb == 1 {
+        TwoBitValue::TBV01
+    } else if tb == 2 {
+        TwoBitValue::TBV10
+    } else {
+        TwoBitValue::TBV11
+    }
+}
+
+fn get_reg_str(flag: BitValue,
+               code: u8) -> String
+{
+    String::from(
+        match flag {
+            BitValue::BV0 => REGS_BYTE[code as usize],
+            BitValue::BV1 => REGS_WORD[code as usize]
+        }
+    )
 }
 
 fn read_i16_val(data: &[u8]) -> i16
@@ -119,11 +175,11 @@ fn read_u16_val(data: &[u8]) -> u16
 
 fn get_mem_ptr_and_displacement(data: &[u8],
                                 rm_code: u8,
-                                mod_code: u8) -> (usize, String)
+                                mod_code: TwoBitValue) -> (usize, String)
 {
     let mut data_offset: usize = 0;
     let mut ret: String = "[".to_owned();
-    if (mod_code == 0b00) && (rm_code == 0b110) {
+    if (mod_code == TwoBitValue::TBV00) && (rm_code == 0b110) {
         let disp = read_u16_val(&data[2..4]);
         ret.push_str(&format!("{}]", disp));
         (2, ret)
@@ -143,8 +199,8 @@ fn get_mem_ptr_and_displacement(data: &[u8],
         );
         let suffix: String =
             match mod_code {
-                0b00 => String::from("]"),
-                0b01 => {
+                TwoBitValue::TBV00 => String::from("]"),
+                TwoBitValue::TBV01 => {
                     data_offset = 1;
                     if data[2] == 0 {
                         String::from(format!("]"))
@@ -159,7 +215,7 @@ fn get_mem_ptr_and_displacement(data: &[u8],
                         }
                     }
                 },
-                0b10 => {
+                TwoBitValue::TBV10 => {
                     data_offset = 2;
                     let data_val = read_i16_val(&data[2..4]);
                     if data_val == 0 {
@@ -177,70 +233,41 @@ fn get_mem_ptr_and_displacement(data: &[u8],
     }
 }
 
-fn get_opcode_mnemonic(opcode: u8) -> String
-{
-    String::from (
-        match opcode {
-            IMM_RM_ADD_OPCODE => "add", //TODO try refactoring this
-            ADD_OPCODE => "add",
-            IMM_ACC_ADD_OPCODE => "add",
-            _ => "mov"
-        }
-    )
-}
-
-fn get_opcode_type(opcode: u8) -> OpcodeType {
-    match opcode {
-        IMM_REG_MOV_OPCODE => OpcodeType::RegMov,
-
-        IMM_RM_MOV_OPCODE |
-        IMM_RM_ADD_OPCODE => OpcodeType::Rm,
-
-        MEM2ACC_MOV_OPCODE |
-        ACC2MEM_MOV_OPCODE |
-        IMM_ACC_ADD_OPCODE => OpcodeType::Acc,
-
-        MOV_OPCODE |
-        ADD_OPCODE => OpcodeType::Standard,
-
-        _ => panic!("Invalid opcode: 0x{:2x}", opcode)
-    }
-}
-
-fn parse_reg_mov(opcode: u8, data: &[u8]) -> (usize, String) {
+fn parse_reg_mov(opcode: Opcode, data: &[u8]) -> (usize, String) {
     let oc_mnmnc = get_opcode_mnemonic(opcode);
-    let immw_flag = (data[0] & IMMW_MASK) >> IMMW_SHFT;
+    let immw_flag = get_bit_value((data[0] & IMMW_MASK) >> IMMW_SHFT);
     let immreg_code = (data[0] & IMMREG_MASK) >> IMMREG_SHFT;
     let immreg_string = get_reg_str(immw_flag, immreg_code);
 
-    if immw_flag == 0 {
-        (2, String::from(format!("{} {}, {}", oc_mnmnc, immreg_string, data[1] as i8)))
-    } else {
-        let val: i16 = read_i16_val(&data[1..3]);
-        (3, String::from(format!("{} {}, {}", oc_mnmnc, immreg_string, val)))
+    match immw_flag {
+        BitValue::BV0 => (2, String::from(format!("{} {}, {}", oc_mnmnc, immreg_string, data[1] as i8))),
+        BitValue::BV1 => {
+            let val: i16 = read_i16_val(&data[1..3]);
+            (3, String::from(format!("{} {}, {}", oc_mnmnc, immreg_string, val)))
+        }
     }
 }
 
-fn parse_rm_instruction(opcode: u8, data: &[u8]) -> (usize, String) {
+fn parse_rm_instruction(opcode: Opcode, data: &[u8]) -> (usize, String) {
+    use TwoBitValue::*;
     let oc_mnmnc = get_opcode_mnemonic(opcode);
-    let w_flag = (data[0] & W_MASK) >> W_SHFT;
+    let w_flag = get_bit_value((data[0] & W_MASK) >> W_SHFT);
     let r_m_code = (data[1] & RM_MASK) >> RM_SHFT;
-    let mod_code = (data[1] & MOD_MASK) >> MOD_SHFT;
+    let mod_code = get_two_bit_value((data[1] & MOD_MASK) >> MOD_SHFT);
 
-    if mod_code != 0b11 {
+    if mod_code != TBV11 {
         let (data_offset, reg_string) = get_mem_ptr_and_displacement(data, r_m_code, mod_code);
-        let data_idx: usize = if (mod_code == 0b01) || (mod_code == 0b10) { 4 } else { 2 };
-        if opcode == IMM_RM_MOV_OPCODE {
+        let data_idx: usize = if (mod_code == TBV01) || (mod_code == TBV10) { 4 } else { 2 };
+        if opcode == Opcode::MovRm {
             return match w_flag {
-                0 =>  (data_offset + 3, String::from(format!("{} {}, byte {}", oc_mnmnc, reg_string, data[data_idx]))),
-                1 =>  (data_offset + 4, String::from(format!("{} {}, word {}", oc_mnmnc, reg_string,
+                BitValue::BV0 =>  (data_offset + 3, String::from(format!("{} {}, byte {}", oc_mnmnc, reg_string, data[data_idx]))),
+                BitValue::BV1 =>  (data_offset + 4, String::from(format!("{} {}, word {}", oc_mnmnc, reg_string,
                                                                       read_u16_val(&data[data_idx..data_idx+2])))),
-                _ => unreachable!()
             }
         } else {
             return match w_flag {
-                0 =>  (data_offset + 3, String::from(format!("{} byte {}, {}", oc_mnmnc, reg_string, data[data_idx]))),
-                1 =>  {
+                BitValue::BV0 =>  (data_offset + 3, String::from(format!("{} byte {}, {}", oc_mnmnc, reg_string, data[data_idx]))),
+                BitValue::BV1 =>  {
                     let s_flag = (data[0] & S_MASK) >> S_SHFT;
                     if s_flag == 0 {
                         (data_offset + 3, String::from(format!("{} word {}, {}", oc_mnmnc, reg_string,
@@ -249,8 +276,7 @@ fn parse_rm_instruction(opcode: u8, data: &[u8]) -> (usize, String) {
                         (data_offset + 3, String::from(format!("{} word {}, {}", oc_mnmnc, reg_string,
                                                                         (data[data_idx] as i8) as i16)))
                     }
-                },
-                _ => unreachable!()
+                }
             }
         }
     } else {
@@ -260,36 +286,37 @@ fn parse_rm_instruction(opcode: u8, data: &[u8]) -> (usize, String) {
     }
 }
 
-fn parse_acc_instruction(opcode: u8, data: &[u8]) -> (usize, String) {
-    let w_flag = (data[0] & W_MASK) >> W_SHFT;
+fn parse_acc_instruction(opcode: Opcode, data: &[u8]) -> (usize, String) {
+    let w_flag = get_bit_value((data[0] & W_MASK) >> W_SHFT);
     let reg_string = get_reg_str(w_flag, 0b000);
     let oc_mnmnc = get_opcode_mnemonic(opcode);
-     if (opcode == IMM_ACC_ADD_OPCODE) & (w_flag == 0) {
+     if (opcode == Opcode::AddAcc) & (w_flag == BitValue::BV0) {
         (2, String::from(format!("{} {}, {}", oc_mnmnc,  reg_string, data[1] as i8)))
     } else {
         let val = read_u16_val(&data[1..2+w_flag as usize]);
         match opcode {
-            MEM2ACC_MOV_OPCODE => (3, String::from(format!("{} {}, [{}]", oc_mnmnc, reg_string, val))),
-            ACC2MEM_MOV_OPCODE => (3, String::from(format!("{} [{}], {}", oc_mnmnc, val, reg_string))),
-            IMM_ACC_ADD_OPCODE => (3, String::from(format!("{} {}, {}", oc_mnmnc,  reg_string, val))),
+            Opcode::MovMem2Acc => (3, String::from(format!("{} {}, [{}]", oc_mnmnc, reg_string, val))),
+            Opcode::MovAcc2Mem => (3, String::from(format!("{} [{}], {}", oc_mnmnc, val, reg_string))),
+            Opcode::AddAcc => (3, String::from(format!("{} {}, {}", oc_mnmnc,  reg_string, val))),
             _ => unreachable!()
         }
     }
 }
 
-fn parse_std_instruction(opcode: u8, data: &[u8]) -> (usize, String) {
+fn parse_std_instruction(opcode: Opcode, data: &[u8]) -> (usize, String) {
+    use TwoBitValue::*;
     let oc_mnmnc = get_opcode_mnemonic(opcode);
-    let w_flag = (data[0] & W_MASK) >> W_SHFT;
+    let w_flag = get_bit_value((data[0] & W_MASK) >> W_SHFT);
     let d_flag = (data[0] & D_MASK) >> D_SHFT;
     let reg_code = (data[1] & REG_MASK) >> REG_SHFT;
-    let mod_code = (data[1] & MOD_MASK) >> MOD_SHFT;
+    let mod_code = get_two_bit_value((data[1] & MOD_MASK) >> MOD_SHFT);
     let r_m_code = (data[1] & RM_MASK) >> RM_SHFT;
 
     let reg_string = get_reg_str(w_flag, reg_code);
     let mut offset: usize = 2;
 
     let rm_string = match mod_code {
-        0b11 => get_reg_str(w_flag, r_m_code),
+        TBV11 => get_reg_str(w_flag, r_m_code),
         _ => {
             let t = get_mem_ptr_and_displacement(data, r_m_code, mod_code);
             offset += t.0;
@@ -307,7 +334,7 @@ fn parse_std_instruction(opcode: u8, data: &[u8]) -> (usize, String) {
 
 fn parse_instruction(data: &[u8]) -> (usize, String)
 {
-    let opcode = get_opcode(data[0]);
+    let opcode = get_opcode(data);
     match get_opcode_type(opcode) {
         OpcodeType::RegMov => parse_reg_mov(opcode, data),
         OpcodeType::Rm => parse_rm_instruction(opcode, data),
@@ -629,4 +656,24 @@ mod test {
         assert_eq!(parse_instruction(&test_data_w5[0]),
                    (5, String::from("add word [bp + si + 1000], 29")));
     }
+
+    #[test]
+    fn test_sub_instructions_1 () {
+        let test_data_w2: [[u8; 2]; 1] = [[0x2b, 0x18]];
+        let test_data_w3: [[u8; 3]; 4] = [[0x2b, 0x5e, 0x00],
+                                          [0x83, 0xee, 0x02],
+                                          [0x83, 0xed, 0x02],
+                                          [0x83, 0xe9, 0x08]];
+        assert_eq!(parse_instruction(&test_data_w2[0]),
+                   (2, String::from("sub bx, [bx + si]")));
+        assert_eq!(parse_instruction(&test_data_w3[0]),
+                   (3, String::from("sub bx, [bp]")));
+        assert_eq!(parse_instruction(&test_data_w3[1]),
+                   (3, String::from("sub si, 2")));
+        assert_eq!(parse_instruction(&test_data_w3[2]),
+                   (3, String::from("sub bp, 2")));
+        assert_eq!(parse_instruction(&test_data_w3[3]),
+                   (3, String::from("sub cx, 8")));
+    }
+
 }
