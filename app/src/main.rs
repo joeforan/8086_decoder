@@ -11,6 +11,7 @@ const MEM2ACC_MOV_OPCODE: u8 = 0x50;
 const ACC2MEM_MOV_OPCODE: u8 = 0x51;
 const ADD_OPCODE: u8 = 0x00;
 const IMM_RM_ADD_OPCODE: u8 = 0x20;
+const IMM_ACC_ADD_OPCODE: u8 = 0x01;
 
 struct OpcodeDecodeOp {
     opcode: u8,
@@ -18,7 +19,7 @@ struct OpcodeDecodeOp {
     shift: u8
 }
 
-const OPCODE_DECODE_OPS: [OpcodeDecodeOp; 7] = [
+const OPCODE_DECODE_OPS: [OpcodeDecodeOp; 8] = [
     OpcodeDecodeOp {
         opcode: MOV_OPCODE,
         mask: 0xFC,
@@ -51,6 +52,11 @@ const OPCODE_DECODE_OPS: [OpcodeDecodeOp; 7] = [
     },
     OpcodeDecodeOp {
         opcode: IMM_RM_ADD_OPCODE,
+        mask: 0xFC,
+        shift: 2
+    },
+    OpcodeDecodeOp {
+        opcode: IMM_ACC_ADD_OPCODE,
         mask: 0xFC,
         shift: 2
     }
@@ -178,6 +184,7 @@ fn get_opcode_mnemonic(opcode: u8) -> String
         match opcode {
             IMM_RM_ADD_OPCODE => "add", //TODO try refactoring this
             ADD_OPCODE => "add",
+            IMM_ACC_ADD_OPCODE => "add",
             _ => "mov"
         }
     )
@@ -234,13 +241,14 @@ fn parse_instruction(opcode: u8, data: &[u8]) -> (usize, String)
             let data_idx: usize = 2;
             (offset + 1, String::from(format!("{} {}, {}", oc_mnmnc, rm_string, data[data_idx])))
         }
-    } else if (opcode == MEM2ACC_MOV_OPCODE) | (opcode == ACC2MEM_MOV_OPCODE) {
+    } else if (opcode == MEM2ACC_MOV_OPCODE) | (opcode == ACC2MEM_MOV_OPCODE) | (opcode == IMM_ACC_ADD_OPCODE) {
         let w_flag = (data[0] & W_MASK) >> W_SHFT;
         let reg_string = get_reg_str(w_flag, 0b000);
         let val = read_u16_val(&data[1..2+w_flag as usize]);
         match opcode {
             MEM2ACC_MOV_OPCODE => (3, String::from(format!("{} {}, [{}]", oc_mnmnc, reg_string, val))),
             ACC2MEM_MOV_OPCODE => (3, String::from(format!("{} [{}], {}", oc_mnmnc, val, reg_string))),
+            IMM_ACC_ADD_OPCODE => (3, String::from(format!("{} {}, {}", oc_mnmnc,  reg_string, val))),
             _ => unreachable!()
         }
     } else {
@@ -280,7 +288,8 @@ fn is_known_opcode(opcode: u8) -> bool {
      (opcode == MEM2ACC_MOV_OPCODE) |
      (opcode == ACC2MEM_MOV_OPCODE) |
      (opcode == ADD_OPCODE) |
-     (opcode == IMM_RM_ADD_OPCODE)
+     (opcode == IMM_RM_ADD_OPCODE) |
+     (opcode == IMM_ACC_ADD_OPCODE)
     )
 }
 
@@ -586,6 +595,8 @@ mod test {
                    (3, String::from("add byte [bx], 34")));
         assert_eq!(parse_instruction(get_opcode(test_data_w3[1][0]), &test_data_w3[1]),
                    (3, String::from("add ax, [bp]")));
+        assert_eq!(parse_instruction(get_opcode(test_data_w3[2][0]), &test_data_w3[2]),
+                   (3, String::from("add ax, 1000")));
         assert_eq!(parse_instruction(get_opcode(test_data_w5[0][0]), &test_data_w5[0]),
                    (5, String::from("add word [bp + si + 1000], 29")));
     }
