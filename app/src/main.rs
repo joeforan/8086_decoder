@@ -491,7 +491,7 @@ mod test {
     }
 
     #[test]
-    fn test_add_mem_to_reg () {
+    fn test_add_instructions_1 () {
         let test_data_w2: [[u8; 2]; 1] = [[0x03, 0x18]];
         let test_data_w3: [[u8; 3]; 4] = [[0x03, 0x5e, 0x00],
                                           [0x83, 0xc6, 0x02],
@@ -507,5 +507,41 @@ mod test {
                    (3, String::from("add bp, 2")));
         assert_eq!(parse_instruction(get_opcode(test_data_w3[3][0]), &test_data_w3[3]),
                    (3, String::from("add cx, 8")));
+    }
+
+    #[test]
+    fn test_add_instructions_2 () {
+        let test_data_w3: [[u8; 3]; 4] = [[0x03, 0x5e, 0x00],
+                                          [0x03, 0x4f, 0x02],
+                                          [0x02, 0x7a, 0x04],
+                                          [0x03, 0x7b, 0x06]];
+        assert_eq!(parse_instruction(get_opcode(test_data_w3[0][0]), &test_data_w3[0]),
+                   (3, String::from("add bx, [bp]")));
+        assert_eq!(parse_instruction(get_opcode(test_data_w3[1][0]), &test_data_w3[1]),
+                   (3, String::from("add cx, [bx + 2]")));
+        assert_eq!(parse_instruction(get_opcode(test_data_w3[2][0]), &test_data_w3[2]),
+                   (3, String::from("add bh, [bp + si + 4]")));
+        assert_eq!(parse_instruction(get_opcode(test_data_w3[3][0]), &test_data_w3[3]),
+                   (3, String::from("add di, [bp + di + 6]")));
+    }
+
+    #[test]
+    fn test_add_instructions_3 () {
+        let test_data_w2: [[u8; 2]; 1] = [[0x01, 0x18]];
+        let test_data_w3: [[u8; 3]; 4] = [[0x01, 0x5e, 0x00],
+                                          [0x01, 0x4f, 0x02],
+                                          [0x00, 0x7a, 0x04],
+                                          [0x01, 0x7b, 0x06]];
+
+        assert_eq!(parse_instruction(get_opcode(test_data_w2[0][0]), &test_data_w2[0]),
+                   (2, String::from("add [bx + si], bx")));
+        assert_eq!(parse_instruction(get_opcode(test_data_w3[0][0]), &test_data_w3[0]),
+                   (3, String::from("add [bp], bx")));
+        assert_eq!(parse_instruction(get_opcode(test_data_w3[1][0]), &test_data_w3[1]),
+                   (3, String::from("add [bx + 2], cx")));
+        assert_eq!(parse_instruction(get_opcode(test_data_w3[2][0]), &test_data_w3[2]),
+                   (3, String::from("add [bp + si + 4], bh")));
+        assert_eq!(parse_instruction(get_opcode(test_data_w3[3][0]), &test_data_w3[3]),
+                   (3, String::from("add [bp + di + 6], di")));
     }
 }
