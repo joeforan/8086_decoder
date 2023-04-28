@@ -59,6 +59,9 @@ const OPCODE_DECODE_OPS: [OpcodeDecodeOp; 7] = [
 const D_MASK: u8 = 0x02;
 const D_SHFT: u8 = 1;
 
+const S_MASK: u8 = 0x02;
+const S_SHFT: u8 = 1;
+
 const W_MASK: u8 = 0x01;
 const W_SHFT: u8 = 0;
 
@@ -184,7 +187,7 @@ fn parse_instruction(opcode: u8, data: &[u8]) -> (usize, String)
 {
     let mut offset: usize = 2;
     let oc_mnmnc = get_opcode_mnemonic(opcode);
-    if opcode == IMM_REG_MOV_OPCODE{
+    if opcode == IMM_REG_MOV_OPCODE {
         let w_flag = (data[0] & IMMW_MASK) >> IMMW_SHFT;
         let reg_code = (data[0] & IMMREG_MASK) >> IMMREG_SHFT;
         let reg_string = get_reg_str(w_flag, reg_code);
@@ -213,8 +216,16 @@ fn parse_instruction(opcode: u8, data: &[u8]) -> (usize, String)
             } else {
                 return match w_flag {
                     0 =>  (offset + data_offset + 1, String::from(format!("{} byte {}, {}", oc_mnmnc, reg_string, data[data_idx]))),
-                    1 =>  (offset + data_offset + 2, String::from(format!("{} word {}, {}", oc_mnmnc, reg_string,
-                                                                          read_u16_val(&data[data_idx..data_idx+2])))),
+                    1 =>  {
+                        let s_flag = (data[0] & S_MASK) >> S_SHFT;
+                        if s_flag == 0 {
+                            (offset + data_offset + 2, String::from(format!("{} word {}, {}", oc_mnmnc, reg_string,
+                                                                            read_u16_val(&data[data_idx..data_idx+2]))))
+                        } else {
+                            (offset + data_offset + 1, String::from(format!("{} word {}, {}", oc_mnmnc, reg_string,
+                                                                            (data[data_idx] as i8) as i16)))
+                        }
+                    },
                     _ => unreachable!()
                 }
             }
