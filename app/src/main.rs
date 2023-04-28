@@ -576,9 +576,10 @@ mod test {
 
     #[test]
     fn test_add_instructions_4 () {
-        let test_data_w2: [[u8; 2]; 3] = [[0x02, 0x00],
+        let test_data_w2: [[u8; 2]; 4] = [[0x02, 0x00],
                                           [0x01, 0xd8],
-                                          [0x00, 0xe0]];
+                                          [0x00, 0xe0],
+                                          [0x04, 0xe2]];
 
         let test_data_w3: [[u8; 3]; 3] = [[0x80, 0x07, 0x22],
                                           [0x03, 0x46, 0x00],
@@ -591,6 +592,8 @@ mod test {
                    (2, String::from("add ax, bx")));
         assert_eq!(parse_instruction(get_opcode(test_data_w2[2][0]), &test_data_w2[2]),
                    (2, String::from("add al, ah")));
+        assert_eq!(parse_instruction(get_opcode(test_data_w2[3][0]), &test_data_w2[3]),
+                   (2, String::from("add al, -30")));
         assert_eq!(parse_instruction(get_opcode(test_data_w3[0][0]), &test_data_w3[0]),
                    (3, String::from("add byte [bx], 34")));
         assert_eq!(parse_instruction(get_opcode(test_data_w3[1][0]), &test_data_w3[1]),
