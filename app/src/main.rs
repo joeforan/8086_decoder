@@ -203,11 +203,20 @@ fn parse_instruction(opcode: u8, data: &[u8]) -> (usize, String)
         if mod_code != 0b11 {
             let (data_offset, reg_string) = get_mem_ptr_and_displacement(data, r_m_code, mod_code);
             let data_idx: usize = if (mod_code == 0b01) || (mod_code == 0b10) { 4 } else { 2 };
-            return match w_flag {
-                0 =>  (offset + data_offset + 1, String::from(format!("{} {}, byte {}", oc_mnmnc, reg_string, data[data_idx]))),
-                1 =>  (offset + data_offset + 2, String::from(format!("{} {}, word {}", oc_mnmnc, reg_string,
-                                                            read_u16_val(&data[data_idx..data_idx+2])))),
-                _ => unreachable!()
+            if opcode == IMM_RM_MOV_OPCODE {
+                return match w_flag {
+                    0 =>  (offset + data_offset + 1, String::from(format!("{} {}, byte {}", oc_mnmnc, reg_string, data[data_idx]))),
+                    1 =>  (offset + data_offset + 2, String::from(format!("{} {}, word {}", oc_mnmnc, reg_string,
+                                                                          read_u16_val(&data[data_idx..data_idx+2])))),
+                    _ => unreachable!()
+                }
+            } else {
+                return match w_flag {
+                    0 =>  (offset + data_offset + 1, String::from(format!("{} byte {}, {}", oc_mnmnc, reg_string, data[data_idx]))),
+                    1 =>  (offset + data_offset + 2, String::from(format!("{} word {}, {}", oc_mnmnc, reg_string,
+                                                                          read_u16_val(&data[data_idx..data_idx+2])))),
+                    _ => unreachable!()
+                }
             }
         } else {
             let rm_string = get_reg_str(w_flag, r_m_code);
