@@ -120,12 +120,10 @@ fn get_opcode(data: &[u8]) -> Opcode {
         (0x80, 0xFC, 0x28, 0x38, SubRm)];
 
     for t in LUT.iter() {
-        if t.3 != 0 {
-            if ((data[0] & t.1) == t.0) & ((data[1] & t.3) == t.2) {
-                return t.4
-            }
-        } else if (data[0] & t.1) == t.0 {
-            return t.4
+        if (data[0] & t.1 == t.0) &
+            ((t.3 == 0) |
+             ((data[1] & t.3) == t.2)) {
+            return t.4;
         }
     }
     panic!("Unknown opcode {}", data[0])
