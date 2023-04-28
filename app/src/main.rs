@@ -207,6 +207,76 @@ fn get_opcode_type(opcode: u8) -> OpcodeType {
     }
 }
 
+fn parse_reg_mov(opcode: u8, data: &[u8]) -> (usize, String) {
+    let oc_mnmnc = get_opcode_mnemonic(opcode);
+    let immw_flag = (data[0] & IMMW_MASK) >> IMMW_SHFT;
+    let immreg_code = (data[0] & IMMREG_MASK) >> IMMREG_SHFT;
+    let immreg_string = get_reg_str(immw_flag, immreg_code);
+    match immw_flag {
+        0 => (2, String::from(format!("{} {}, {}", oc_mnmnc, immreg_string, data[1] as i8))),
+        1 => {
+            let val: i16 = read_i16_val(&data[1..3]);
+            (3, String::from(format!("{} {}, {}", oc_mnmnc, immreg_string, val)))
+        },
+        _ => unreachable!()
+    }
+}
+
+fn parse_rm_instruction(opcode: u8, data: &[u8]) -> (usize, String) {
+    let oc_mnmnc = get_opcode_mnemonic(opcode);
+    let w_flag = (data[0] & W_MASK) >> W_SHFT;
+    let mod_code = (data[1] & MOD_MASK) >> MOD_SHFT;
+    let r_m_code = (data[1] & RM_MASK) >> RM_SHFT;
+    if mod_code != 0b11 {
+        let (data_offset, reg_string) = get_mem_ptr_and_displacement(data, r_m_code, mod_code);
+        let data_idx: usize = if (mod_code == 0b01) || (mod_code == 0b10) { 4 } else { 2 };
+        if opcode == IMM_RM_MOV_OPCODE {
+            return match w_flag {
+                0 =>  (data_offset + 3, String::from(format!("{} {}, byte {}", oc_mnmnc, reg_string, data[data_idx]))),
+                1 =>  (data_offset + 4, String::from(format!("{} {}, word {}", oc_mnmnc, reg_string,
+                                                                      read_u16_val(&data[data_idx..data_idx+2])))),
+                _ => unreachable!()
+            }
+        } else {
+            return match w_flag {
+                0 =>  (data_offset + 3, String::from(format!("{} byte {}, {}", oc_mnmnc, reg_string, data[data_idx]))),
+                1 =>  {
+                    let s_flag = (data[0] & S_MASK) >> S_SHFT;
+                    if s_flag == 0 {
+                        (data_offset + 3, String::from(format!("{} word {}, {}", oc_mnmnc, reg_string,
+                                                                        read_u16_val(&data[data_idx..data_idx+2]))))
+                    } else {
+                        (data_offset + 3, String::from(format!("{} word {}, {}", oc_mnmnc, reg_string,
+                                                                        (data[data_idx] as i8) as i16)))
+                    }
+                },
+                _ => unreachable!()
+            }
+        }
+    } else {
+        let rm_string = get_reg_str(w_flag, r_m_code);
+        let data_idx: usize = 2;
+        (3, String::from(format!("{} {}, {}", oc_mnmnc, rm_string, data[data_idx])))
+    }
+}
+
+fn parse_acc_instruction(opcode: u8, data: &[u8]) -> (usize, String) {
+    let w_flag = (data[0] & W_MASK) >> W_SHFT;
+    let reg_string = get_reg_str(w_flag, 0b000);
+    let oc_mnmnc = get_opcode_mnemonic(opcode);
+     if (opcode == IMM_ACC_ADD_OPCODE) & (w_flag == 0) {
+        (2, String::from(format!("{} {}, {}", oc_mnmnc,  reg_string, data[1] as i8)))
+    } else {
+        let val = read_u16_val(&data[1..2+w_flag as usize]);
+        match opcode {
+            MEM2ACC_MOV_OPCODE => (3, String::from(format!("{} {}, [{}]", oc_mnmnc, reg_string, val))),
+            ACC2MEM_MOV_OPCODE => (3, String::from(format!("{} [{}], {}", oc_mnmnc, val, reg_string))),
+            IMM_ACC_ADD_OPCODE => (3, String::from(format!("{} {}, {}", oc_mnmnc,  reg_string, val))),
+            _ => unreachable!()
+        }
+    }
+}
+
 fn parse_instruction(data: &[u8]) -> (usize, String)
 {
     let mut offset: usize = 2;
@@ -218,66 +288,9 @@ fn parse_instruction(data: &[u8]) -> (usize, String)
     let reg_code = (data[1] & REG_MASK) >> REG_SHFT;
 
     match get_opcode_type(opcode) {
-        OpcodeType::RegMov => {
-            let immw_flag = (data[0] & IMMW_MASK) >> IMMW_SHFT;
-            let immreg_code = (data[0] & IMMREG_MASK) >> IMMREG_SHFT;
-            let immreg_string = get_reg_str(immw_flag, immreg_code);
-            match immw_flag {
-                0 => (offset, String::from(format!("{} {}, {}", oc_mnmnc, immreg_string, data[1] as i8))),
-                1 => {
-                    let val: i16 = read_i16_val(&data[1..3]);
-                    (offset+1, String::from(format!("{} {}, {}", oc_mnmnc, immreg_string, val)))
-                },
-                _ => unreachable!()
-            }
-        },
-        OpcodeType::Rm => {
-            if mod_code != 0b11 {
-                let (data_offset, reg_string) = get_mem_ptr_and_displacement(data, r_m_code, mod_code);
-                let data_idx: usize = if (mod_code == 0b01) || (mod_code == 0b10) { 4 } else { 2 };
-                if opcode == IMM_RM_MOV_OPCODE {
-                    return match w_flag {
-                        0 =>  (offset + data_offset + 1, String::from(format!("{} {}, byte {}", oc_mnmnc, reg_string, data[data_idx]))),
-                        1 =>  (offset + data_offset + 2, String::from(format!("{} {}, word {}", oc_mnmnc, reg_string,
-                                                                              read_u16_val(&data[data_idx..data_idx+2])))),
-                        _ => unreachable!()
-                    }
-                } else {
-                    return match w_flag {
-                        0 =>  (offset + data_offset + 1, String::from(format!("{} byte {}, {}", oc_mnmnc, reg_string, data[data_idx]))),
-                        1 =>  {
-                            let s_flag = (data[0] & S_MASK) >> S_SHFT;
-                            if s_flag == 0 {
-                                (offset + data_offset + 2, String::from(format!("{} word {}, {}", oc_mnmnc, reg_string,
-                                                                                read_u16_val(&data[data_idx..data_idx+2]))))
-                            } else {
-                                (offset + data_offset + 1, String::from(format!("{} word {}, {}", oc_mnmnc, reg_string,
-                                                                                (data[data_idx] as i8) as i16)))
-                            }
-                        },
-                        _ => unreachable!()
-                    }
-                }
-            } else {
-                let rm_string = get_reg_str(w_flag, r_m_code);
-                let data_idx: usize = 2;
-                (offset + 1, String::from(format!("{} {}, {}", oc_mnmnc, rm_string, data[data_idx])))
-            }
-        },
-        OpcodeType::Acc =>  {
-            let reg_string = get_reg_str(w_flag, 0b000);
-            if (opcode == IMM_ACC_ADD_OPCODE) & (w_flag == 0) {
-                (2, String::from(format!("{} {}, {}", oc_mnmnc,  reg_string, data[1] as i8)))
-            } else {
-                let val = read_u16_val(&data[1..2+w_flag as usize]);
-                match opcode {
-                    MEM2ACC_MOV_OPCODE => (3, String::from(format!("{} {}, [{}]", oc_mnmnc, reg_string, val))),
-                    ACC2MEM_MOV_OPCODE => (3, String::from(format!("{} [{}], {}", oc_mnmnc, val, reg_string))),
-                    IMM_ACC_ADD_OPCODE => (3, String::from(format!("{} {}, {}", oc_mnmnc,  reg_string, val))),
-                    _ => unreachable!()
-                }
-            }
-        },
+        OpcodeType::RegMov => parse_reg_mov(opcode, data),
+        OpcodeType::Rm => parse_rm_instruction(opcode, data),
+        OpcodeType::Acc =>  parse_acc_instruction(opcode, data),
         OpcodeType::Standard => {
             let d_flag = (data[0] & D_MASK) >> D_SHFT;
 
