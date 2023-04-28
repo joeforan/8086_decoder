@@ -225,8 +225,9 @@ fn parse_reg_mov(opcode: u8, data: &[u8]) -> (usize, String) {
 fn parse_rm_instruction(opcode: u8, data: &[u8]) -> (usize, String) {
     let oc_mnmnc = get_opcode_mnemonic(opcode);
     let w_flag = (data[0] & W_MASK) >> W_SHFT;
-    let mod_code = (data[1] & MOD_MASK) >> MOD_SHFT;
     let r_m_code = (data[1] & RM_MASK) >> RM_SHFT;
+    let mod_code = (data[1] & MOD_MASK) >> MOD_SHFT;
+
     if mod_code != 0b11 {
         let (data_offset, reg_string) = get_mem_ptr_and_displacement(data, r_m_code, mod_code);
         let data_idx: usize = if (mod_code == 0b01) || (mod_code == 0b10) { 4 } else { 2 };
@@ -296,11 +297,13 @@ fn parse_std_instruction(opcode: u8, data: &[u8]) -> (usize, String) {
             t.1
         }
     };
-    match d_flag {
-        0 => (offset, String::from(format!("{} {}, {}", oc_mnmnc, rm_string, reg_string))),
-        1 => (offset, String::from(format!("{} {}, {}", oc_mnmnc, reg_string, rm_string))),
+    let (left, right) = match d_flag {
+        0 => (rm_string, reg_string),
+        1 => (reg_string, rm_string),
         _ => unreachable!()
-    }
+    };
+
+    (offset, String::from(format!("{} {}, {}", oc_mnmnc, left, right)))
 }
 
 fn parse_instruction(data: &[u8]) -> (usize, String)
