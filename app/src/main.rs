@@ -212,13 +212,12 @@ fn parse_reg_mov(opcode: u8, data: &[u8]) -> (usize, String) {
     let immw_flag = (data[0] & IMMW_MASK) >> IMMW_SHFT;
     let immreg_code = (data[0] & IMMREG_MASK) >> IMMREG_SHFT;
     let immreg_string = get_reg_str(immw_flag, immreg_code);
-    match immw_flag {
-        0 => (2, String::from(format!("{} {}, {}", oc_mnmnc, immreg_string, data[1] as i8))),
-        1 => {
-            let val: i16 = read_i16_val(&data[1..3]);
-            (3, String::from(format!("{} {}, {}", oc_mnmnc, immreg_string, val)))
-        },
-        _ => unreachable!()
+
+    if immw_flag == 0 {
+        (2, String::from(format!("{} {}, {}", oc_mnmnc, immreg_string, data[1] as i8)))
+    } else {
+        let val: i16 = read_i16_val(&data[1..3]);
+        (3, String::from(format!("{} {}, {}", oc_mnmnc, immreg_string, val)))
     }
 }
 
@@ -297,10 +296,10 @@ fn parse_std_instruction(opcode: u8, data: &[u8]) -> (usize, String) {
             t.1
         }
     };
-    let (left, right) = match d_flag {
-        0 => (rm_string, reg_string),
-        1 => (reg_string, rm_string),
-        _ => unreachable!()
+    let (left, right) = if d_flag == 0 {
+        (rm_string, reg_string)
+    } else {
+        (reg_string, rm_string)
     };
 
     (offset, String::from(format!("{} {}, {}", oc_mnmnc, left, right)))
