@@ -4,61 +4,52 @@ use std::fs::read;
 const REGS_BYTE: [&str; 8] = ["al", "cl", "dl", "bl", "ah", "ch", "dh", "bh"];
 const REGS_WORD: [&str; 8] = ["ax", "cx", "dx", "bx", "sp", "bp", "si", "di"];
 
-const MOV_OPCODE: u8 = 0x22;
-const IMM_REG_MOV_OPCODE: u8 = 0x0B;
-const IMM_RM_MOV_OPCODE: u8 = 0x63;
-const MEM2ACC_MOV_OPCODE: u8 = 0x50;
-const ACC2MEM_MOV_OPCODE: u8 = 0x51;
+const MOV_OPCODE: u8 = 0x88;
+const IMM_REG_MOV_OPCODE: u8 = 0xB0;
+const IMM_RM_MOV_OPCODE: u8 = 0xc6;
+const MEM2ACC_MOV_OPCODE: u8 = 0xA0;
+const ACC2MEM_MOV_OPCODE: u8 = 0xA2;
 const ADD_OPCODE: u8 = 0x00;
-const IMM_RM_ADD_OPCODE: u8 = 0x20;
-const IMM_ACC_ADD_OPCODE: u8 = 0x01;
+const IMM_RM_ADD_OPCODE: u8 = 0x80;
+const IMM_ACC_ADD_OPCODE: u8 = 0x04;
 
 struct OpcodeDecodeOp {
     opcode: u8,
     mask: u8,
-    shift: u8
 }
 
 const OPCODE_DECODE_OPS: [OpcodeDecodeOp; 8] = [
     OpcodeDecodeOp {
         opcode: MOV_OPCODE,
         mask: 0xFC,
-        shift: 2
     },
     OpcodeDecodeOp {
         opcode: IMM_REG_MOV_OPCODE,
         mask: 0xF0,
-        shift: 4
     },
     OpcodeDecodeOp {
         opcode: IMM_RM_MOV_OPCODE,
         mask: 0xFE,
-        shift: 1
     },
     OpcodeDecodeOp {
         opcode: MEM2ACC_MOV_OPCODE,
         mask: 0xFE,
-        shift: 1
     },
     OpcodeDecodeOp {
         opcode: ACC2MEM_MOV_OPCODE,
         mask: 0xFE,
-        shift: 1
     },
     OpcodeDecodeOp {
         opcode: ADD_OPCODE,
         mask: 0xFC,
-        shift: 2
     },
     OpcodeDecodeOp {
         opcode: IMM_RM_ADD_OPCODE,
         mask: 0xFC,
-        shift: 2
     },
     OpcodeDecodeOp {
         opcode: IMM_ACC_ADD_OPCODE,
         mask: 0xFC,
-        shift: 2
     }
 ];
 
@@ -101,7 +92,7 @@ fn get_reg_str(flag: u8,
 fn get_opcode(byte: u8) -> u8
 {
     for op in OPCODE_DECODE_OPS.iter() {
-        if ((byte & op.mask) >> op.shift) == op.opcode {
+        if (byte & op.mask) == op.opcode {
             return op.opcode;
         }
     }
