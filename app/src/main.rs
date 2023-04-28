@@ -544,4 +544,12 @@ mod test {
         assert_eq!(parse_instruction(get_opcode(test_data_w3[3][0]), &test_data_w3[3]),
                    (3, String::from("add [bp + di + 6], di")));
     }
+
+    #[test]
+    fn test_add_instructions_4 () {
+        let test_data_w3: [[u8; 3]; 1] = [[0x80, 0x07, 0x22]];
+
+        assert_eq!(parse_instruction(get_opcode(test_data_w3[0][0]), &test_data_w3[0]),
+                   (3, String::from("add byte [bx], 34")));
+    }
 }
