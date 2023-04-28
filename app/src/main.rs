@@ -15,10 +15,10 @@ const IMM_ACC_ADD_OPCODE: u8 = 0x04;
 
 enum OpcodeType
 {
-    ImmMov,
+    RegMov,
     Rm,
     Acc,
-    Misc
+    Standard
 }
 
 struct OpcodeDecodeOp {
@@ -191,13 +191,19 @@ fn get_opcode_mnemonic(opcode: u8) -> String
 
 fn get_opcode_type(opcode: u8) -> OpcodeType {
     match opcode {
-        IMM_REG_MOV_OPCODE => OpcodeType::ImmMov,
+        IMM_REG_MOV_OPCODE => OpcodeType::RegMov,
+
         IMM_RM_MOV_OPCODE |
         IMM_RM_ADD_OPCODE => OpcodeType::Rm,
+
         MEM2ACC_MOV_OPCODE |
         ACC2MEM_MOV_OPCODE |
         IMM_ACC_ADD_OPCODE => OpcodeType::Acc,
-        _ => OpcodeType::Misc
+
+        MOV_OPCODE |
+        ADD_OPCODE => OpcodeType::Standard,
+
+        _ => panic!("Invalid opcode: 0x{:2x}", opcode)
     }
 }
 
@@ -212,7 +218,7 @@ fn parse_instruction(data: &[u8]) -> (usize, String)
     let reg_code = (data[1] & REG_MASK) >> REG_SHFT;
 
     match get_opcode_type(opcode) {
-        OpcodeType::ImmMov => {
+        OpcodeType::RegMov => {
             let immw_flag = (data[0] & IMMW_MASK) >> IMMW_SHFT;
             let immreg_code = (data[0] & IMMREG_MASK) >> IMMREG_SHFT;
             let immreg_string = get_reg_str(immw_flag, immreg_code);
@@ -272,7 +278,7 @@ fn parse_instruction(data: &[u8]) -> (usize, String)
                 }
             }
         },
-        OpcodeType::Misc => {
+        OpcodeType::Standard => {
             let d_flag = (data[0] & D_MASK) >> D_SHFT;
 
             let reg_string = get_reg_str(w_flag, reg_code);
