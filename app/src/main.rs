@@ -45,8 +45,8 @@ const OPCODE_DECODE_OPS: [OpcodeDecodeOp; 6] = [
     },
     OpcodeDecodeOp {
         opcode: ADD_OPCODE,
-        mask: 0x78,
-        shift: 3
+        mask: 0xFC,
+        shift: 2
     }
 ];
 
@@ -479,9 +479,14 @@ mod test {
 
     #[test]
     fn test_add_mem_to_reg () {
-        let test_data_w2: [[u8; 2];1] = [[0x03, 0x18]];
-                                         //[0x03, 0x5]
+        let test_data_w2: [[u8; 2]; 1] = [[0x03, 0x18]];
+        let test_data_w3: [[u8; 3]; 1] = [[0x03, 0x5e, 0x00]];
+                                          //[0x83, 0xc6, 0x02]];
         assert_eq!(parse_instruction(get_opcode(test_data_w2[0][0]), &test_data_w2[0]),
                    (2, String::from("add bx, [bx + si]")));
+        assert_eq!(parse_instruction(get_opcode(test_data_w3[0][0]), &test_data_w3[0]),
+                   (3, String::from("add bx, [bp]")));
+        //assert_eq!(parse_instruction(get_opcode(test_data_w3[1][0]), &test_data_w3[1]),
+//                   (3, String::from("add si, 2")));
     }
 }
