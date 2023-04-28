@@ -13,6 +13,14 @@ const ADD_OPCODE: u8 = 0x00;
 const IMM_RM_ADD_OPCODE: u8 = 0x80;
 const IMM_ACC_ADD_OPCODE: u8 = 0x04;
 
+enum OpcodeType
+{
+    ImmMov,
+    Rm,
+    Acc,
+    Misc
+}
+
 struct OpcodeDecodeOp {
     opcode: u8,
     mask: u8,
@@ -181,14 +189,6 @@ fn get_opcode_mnemonic(opcode: u8) -> String
     )
 }
 
-enum OpcodeType
-{
-    ImmMov,
-    Rm,
-    Acc,
-    Misc
-}
-
 fn get_opcode_type(opcode: u8) -> OpcodeType {
     match opcode {
         IMM_REG_MOV_OPCODE => OpcodeType::ImmMov,
@@ -201,9 +201,10 @@ fn get_opcode_type(opcode: u8) -> OpcodeType {
     }
 }
 
-fn parse_instruction(opcode: u8, data: &[u8]) -> (usize, String)
+fn parse_instruction(data: &[u8]) -> (usize, String)
 {
     let mut offset: usize = 2;
+    let opcode = get_opcode(data[0]);
     let oc_mnmnc = get_opcode_mnemonic(opcode);
     let w_flag = (data[0] & W_MASK) >> W_SHFT;
     let mod_code = (data[1] & MOD_MASK) >> MOD_SHFT;
@@ -298,32 +299,14 @@ fn decode_from_file(filepath: &String) -> String {
     decode_from_data(&data)
 }
 
-fn is_known_opcode(opcode: u8) -> bool {
-    ((opcode == MOV_OPCODE) |
-     (opcode == IMM_REG_MOV_OPCODE) |
-     (opcode == IMM_RM_MOV_OPCODE) |
-     (opcode == MEM2ACC_MOV_OPCODE) |
-     (opcode == ACC2MEM_MOV_OPCODE) |
-     (opcode == ADD_OPCODE) |
-     (opcode == IMM_RM_ADD_OPCODE) |
-     (opcode == IMM_ACC_ADD_OPCODE)
-    )
-}
-
 fn decode_from_data(data: &[u8]) -> String {
     let n = data.len();
     let mut i = 0;
     let mut ret: String = "".to_owned();
     ret.push_str("bits 16\n\n");
     while i < n {
-        let byte = data[i];
         let (offset, code): (usize, String) = {
-            let opcode = get_opcode(byte);
-            if is_known_opcode(opcode) {
-                parse_instruction(opcode, &data[i..n])
-            } else {
-                panic!("Unknown opcode {} at byte {}", opcode, i)
-            }
+            parse_instruction(&data[i..n])
         };
         ret.push_str(&code);
         ret.push_str("\n");
@@ -348,7 +331,7 @@ mod test {
     #[test]
     fn test_parse_instruction() {
         let test_data: [u8; 2] = [0x89, 0xd9];
-        assert_eq!(parse_instruction(MOV_OPCODE, &test_data), (2, String::from("mov cx, bx")));
+        assert_eq!(parse_instruction(&test_data), (2, String::from("mov cx, bx")));
     }
 
     #[test]
@@ -435,11 +418,11 @@ mod test {
     fn test_parse_8bit_imm_mov() {
         {
             let test_data: [u8; 2] = [0xb1, 0x0c];
-            assert_eq!(parse_instruction(get_opcode(test_data[0]), &test_data), (2, String::from("mov cl, 12")));
+            assert_eq!(parse_instruction(&test_data), (2, String::from("mov cl, 12")));
         }
         {
             let test_data: [u8; 2] = [0xb5, 0xf4];
-            assert_eq!(parse_instruction(get_opcode(test_data[0]), &test_data), (2, String::from("mov ch, -12")));
+            assert_eq!(parse_instruction(&test_data), (2, String::from("mov ch, -12")));
         }
     }
 
@@ -450,10 +433,10 @@ mod test {
                                        [0xba, 0x6c, 0x0f],
                                        [0xba, 0x94, 0xf0]];
 
-        assert_eq!(parse_instruction(get_opcode(test_data[0][0]), &test_data[0]), (3, String::from("mov cx, 12")));
-        assert_eq!(parse_instruction(get_opcode(test_data[1][0]), &test_data[1]), (3, String::from("mov cx, -12")));
-        assert_eq!(parse_instruction(get_opcode(test_data[2][0]), &test_data[2]), (3, String::from("mov dx, 3948")));
-        assert_eq!(parse_instruction(get_opcode(test_data[3][0]), &test_data[3]), (3, String::from("mov dx, -3948")));
+        assert_eq!(parse_instruction(&test_data[0]), (3, String::from("mov cx, 12")));
+        assert_eq!(parse_instruction(&test_data[1]), (3, String::from("mov cx, -12")));
+        assert_eq!(parse_instruction(&test_data[2]), (3, String::from("mov dx, 3948")));
+        assert_eq!(parse_instruction(&test_data[3]), (3, String::from("mov dx, -3948")));
     }
 
     #[test]
@@ -464,11 +447,11 @@ mod test {
                                           [0x8a, 0x60, 0x04]];
         let test_data_w4: [[u8; 4]; 1] = [[0x8a, 0x80, 0x87, 0x13]];
 
-        assert_eq!(parse_instruction(get_opcode(test_data_w2[0][0]), &test_data_w2[0]), (2, String::from("mov al, [bx + si]")));
-        assert_eq!(parse_instruction(get_opcode(test_data_w2[1][0]), &test_data_w2[1]), (2, String::from("mov bx, [bp + di]")));
-        assert_eq!(parse_instruction(get_opcode(test_data_w3[0][0]), &test_data_w3[0]), (3, String::from("mov dx, [bp]")));
-        assert_eq!(parse_instruction(get_opcode(test_data_w3[1][0]), &test_data_w3[1]), (3, String::from("mov ah, [bx + si + 4]")));
-        assert_eq!(parse_instruction(get_opcode(test_data_w4[0][0]), &test_data_w4[0]), (4, String::from("mov al, [bx + si + 4999]")));
+        assert_eq!(parse_instruction(&test_data_w2[0]), (2, String::from("mov al, [bx + si]")));
+        assert_eq!(parse_instruction(&test_data_w2[1]), (2, String::from("mov bx, [bp + di]")));
+        assert_eq!(parse_instruction(&test_data_w3[0]), (3, String::from("mov dx, [bp]")));
+        assert_eq!(parse_instruction(&test_data_w3[1]), (3, String::from("mov ah, [bx + si + 4]")));
+        assert_eq!(parse_instruction(&test_data_w4[0]), (4, String::from("mov al, [bx + si + 4999]")));
     }
 
     #[test]
@@ -477,9 +460,9 @@ mod test {
                                           [0x88, 0x0a]];
         let test_data_w3: [[u8; 3]; 1] = [[0x88, 0x6e, 0x00]];
 
-        assert_eq!(parse_instruction(get_opcode(test_data_w2[0][0]), &test_data_w2[0]), (2, String::from("mov [bx + di], cx")));
-        assert_eq!(parse_instruction(get_opcode(test_data_w2[1][0]), &test_data_w2[1]), (2, String::from("mov [bp + si], cl")));
-        assert_eq!(parse_instruction(get_opcode(test_data_w3[0][0]), &test_data_w3[0]), (3, String::from("mov [bp], ch")));
+        assert_eq!(parse_instruction(&test_data_w2[0]), (2, String::from("mov [bx + di], cx")));
+        assert_eq!(parse_instruction(&test_data_w2[1]), (2, String::from("mov [bp + si], cl")));
+        assert_eq!(parse_instruction(&test_data_w3[0]), (3, String::from("mov [bp], ch")));
 
     }
 
@@ -489,9 +472,9 @@ mod test {
                                           [0x8b, 0x57, 0xe0]];
         let test_data_w4: [[u8; 4]; 1] = [[0x89, 0x8c, 0xd4, 0xfe]];
 
-        assert_eq!(parse_instruction(get_opcode(test_data_w3[0][0]), &test_data_w3[0]), (3, String::from("mov ax, [bx + di - 37]")));
-        assert_eq!(parse_instruction(get_opcode(test_data_w3[1][0]), &test_data_w3[1]), (3, String::from("mov dx, [bx - 32]")));
-        assert_eq!(parse_instruction(get_opcode(test_data_w4[0][0]), &test_data_w4[0]), (4, String::from("mov [si - 300], cx")));
+        assert_eq!(parse_instruction(&test_data_w3[0]), (3, String::from("mov ax, [bx + di - 37]")));
+        assert_eq!(parse_instruction(&test_data_w3[1]), (3, String::from("mov dx, [bx - 32]")));
+        assert_eq!(parse_instruction(&test_data_w4[0]), (4, String::from("mov [si - 300], cx")));
     }
 
     #[test]
@@ -499,8 +482,8 @@ mod test {
         let test_data_w3: [[u8; 3]; 1] = [[0xc6, 0x03, 0x07]];
         let test_data_w6: [[u8; 6]; 1] = [[0xc7, 0x85, 0x85, 0x03, 0x5b, 0x01]];
 
-        assert_eq!(parse_instruction(get_opcode(test_data_w3[0][0]), &test_data_w3[0]), (3, String::from("mov [bp + di], byte 7")));
-        assert_eq!(parse_instruction(get_opcode(test_data_w6[0][0]), &test_data_w6[0]), (6, String::from("mov [di + 901], word 347")));
+        assert_eq!(parse_instruction(&test_data_w3[0]), (3, String::from("mov [bp + di], byte 7")));
+        assert_eq!(parse_instruction(&test_data_w6[0]), (6, String::from("mov [di + 901], word 347")));
     }
 
     #[test]
@@ -508,9 +491,9 @@ mod test {
         let test_data_w4: [[u8; 4]; 2] = [[0x8b, 0x2e, 0x05, 0x00],
                                           [0x8b, 0x1e, 0x82, 0x0d]];
 
-        assert_eq!(parse_instruction(get_opcode(test_data_w4[0][0]), &test_data_w4[0]),
+        assert_eq!(parse_instruction(&test_data_w4[0]),
                    (4, String::from("mov bp, [5]")));
-        assert_eq!(parse_instruction(get_opcode(test_data_w4[1][0]), &test_data_w4[1]),
+        assert_eq!(parse_instruction(&test_data_w4[1]),
                    (4, String::from("mov bx, [3458]")));
     }
 
@@ -519,9 +502,9 @@ mod test {
         let test_data_w3: [[u8; 3]; 2] = [[0xa1, 0xfb, 0x09],
                                           [0xa1, 0x10, 0x00]];
 
-        assert_eq!(parse_instruction(get_opcode(test_data_w3[0][0]), &test_data_w3[0]),
+        assert_eq!(parse_instruction(&test_data_w3[0]),
                    (3, String::from("mov ax, [2555]")));
-        assert_eq!(parse_instruction(get_opcode(test_data_w3[1][0]), &test_data_w3[1]),
+        assert_eq!(parse_instruction(&test_data_w3[1]),
                    (3, String::from("mov ax, [16]")));
     }
 
@@ -530,9 +513,9 @@ mod test {
         let test_data_w3: [[u8; 3]; 2] = [[0xa3, 0xfa, 0x09],
                                           [0xa3, 0x0f, 0x00]];
 
-        assert_eq!(parse_instruction(get_opcode(test_data_w3[0][0]), &test_data_w3[0]),
+        assert_eq!(parse_instruction(&test_data_w3[0]),
                    (3, String::from("mov [2554], ax")));
-        assert_eq!(parse_instruction(get_opcode(test_data_w3[1][0]), &test_data_w3[1]),
+        assert_eq!(parse_instruction(&test_data_w3[1]),
                    (3, String::from("mov [15], ax")));
     }
 
@@ -543,15 +526,15 @@ mod test {
                                           [0x83, 0xc6, 0x02],
                                           [0x83, 0xc5, 0x02],
                                           [0x83, 0xc1, 0x08]];
-        assert_eq!(parse_instruction(get_opcode(test_data_w2[0][0]), &test_data_w2[0]),
+        assert_eq!(parse_instruction(&test_data_w2[0]),
                    (2, String::from("add bx, [bx + si]")));
-        assert_eq!(parse_instruction(get_opcode(test_data_w3[0][0]), &test_data_w3[0]),
+        assert_eq!(parse_instruction(&test_data_w3[0]),
                    (3, String::from("add bx, [bp]")));
-        assert_eq!(parse_instruction(get_opcode(test_data_w3[1][0]), &test_data_w3[1]),
+        assert_eq!(parse_instruction(&test_data_w3[1]),
                    (3, String::from("add si, 2")));
-        assert_eq!(parse_instruction(get_opcode(test_data_w3[2][0]), &test_data_w3[2]),
+        assert_eq!(parse_instruction(&test_data_w3[2]),
                    (3, String::from("add bp, 2")));
-        assert_eq!(parse_instruction(get_opcode(test_data_w3[3][0]), &test_data_w3[3]),
+        assert_eq!(parse_instruction(&test_data_w3[3]),
                    (3, String::from("add cx, 8")));
     }
 
@@ -561,13 +544,13 @@ mod test {
                                           [0x03, 0x4f, 0x02],
                                           [0x02, 0x7a, 0x04],
                                           [0x03, 0x7b, 0x06]];
-        assert_eq!(parse_instruction(get_opcode(test_data_w3[0][0]), &test_data_w3[0]),
+        assert_eq!(parse_instruction(&test_data_w3[0]),
                    (3, String::from("add bx, [bp]")));
-        assert_eq!(parse_instruction(get_opcode(test_data_w3[1][0]), &test_data_w3[1]),
+        assert_eq!(parse_instruction(&test_data_w3[1]),
                    (3, String::from("add cx, [bx + 2]")));
-        assert_eq!(parse_instruction(get_opcode(test_data_w3[2][0]), &test_data_w3[2]),
+        assert_eq!(parse_instruction(&test_data_w3[2]),
                    (3, String::from("add bh, [bp + si + 4]")));
-        assert_eq!(parse_instruction(get_opcode(test_data_w3[3][0]), &test_data_w3[3]),
+        assert_eq!(parse_instruction(&test_data_w3[3]),
                    (3, String::from("add di, [bp + di + 6]")));
     }
 
@@ -579,15 +562,15 @@ mod test {
                                           [0x00, 0x7a, 0x04],
                                           [0x01, 0x7b, 0x06]];
 
-        assert_eq!(parse_instruction(get_opcode(test_data_w2[0][0]), &test_data_w2[0]),
+        assert_eq!(parse_instruction(&test_data_w2[0]),
                    (2, String::from("add [bx + si], bx")));
-        assert_eq!(parse_instruction(get_opcode(test_data_w3[0][0]), &test_data_w3[0]),
+        assert_eq!(parse_instruction(&test_data_w3[0]),
                    (3, String::from("add [bp], bx")));
-        assert_eq!(parse_instruction(get_opcode(test_data_w3[1][0]), &test_data_w3[1]),
+        assert_eq!(parse_instruction(&test_data_w3[1]),
                    (3, String::from("add [bx + 2], cx")));
-        assert_eq!(parse_instruction(get_opcode(test_data_w3[2][0]), &test_data_w3[2]),
+        assert_eq!(parse_instruction(&test_data_w3[2]),
                    (3, String::from("add [bp + si + 4], bh")));
-        assert_eq!(parse_instruction(get_opcode(test_data_w3[3][0]), &test_data_w3[3]),
+        assert_eq!(parse_instruction(&test_data_w3[3]),
                    (3, String::from("add [bp + di + 6], di")));
     }
 
@@ -604,23 +587,23 @@ mod test {
                                           [0x05, 0xe8, 0x03]];
         let test_data_w5: [[u8; 5]; 1] = [[0x83, 0x82, 0xe8, 0x03, 0x1d]];
 
-        assert_eq!(parse_instruction(get_opcode(test_data_w2[0][0]), &test_data_w2[0]),
+        assert_eq!(parse_instruction(&test_data_w2[0]),
                    (2, String::from("add al, [bx + si]")));
-        assert_eq!(parse_instruction(get_opcode(test_data_w2[1][0]), &test_data_w2[1]),
+        assert_eq!(parse_instruction(&test_data_w2[1]),
                    (2, String::from("add ax, bx")));
-        assert_eq!(parse_instruction(get_opcode(test_data_w2[2][0]), &test_data_w2[2]),
+        assert_eq!(parse_instruction(&test_data_w2[2]),
                    (2, String::from("add al, ah")));
-        assert_eq!(parse_instruction(get_opcode(test_data_w2[3][0]), &test_data_w2[3]),
+        assert_eq!(parse_instruction(&test_data_w2[3]),
                    (2, String::from("add al, -30")));
-        assert_eq!(parse_instruction(get_opcode(test_data_w2[4][0]), &test_data_w2[4]),
+        assert_eq!(parse_instruction(&test_data_w2[4]),
                    (2, String::from("add al, 9")));
-        assert_eq!(parse_instruction(get_opcode(test_data_w3[0][0]), &test_data_w3[0]),
+        assert_eq!(parse_instruction(&test_data_w3[0]),
                    (3, String::from("add byte [bx], 34")));
-        assert_eq!(parse_instruction(get_opcode(test_data_w3[1][0]), &test_data_w3[1]),
+        assert_eq!(parse_instruction(&test_data_w3[1]),
                    (3, String::from("add ax, [bp]")));
-        assert_eq!(parse_instruction(get_opcode(test_data_w3[2][0]), &test_data_w3[2]),
+        assert_eq!(parse_instruction(&test_data_w3[2]),
                    (3, String::from("add ax, 1000")));
-        assert_eq!(parse_instruction(get_opcode(test_data_w5[0][0]), &test_data_w5[0]),
+        assert_eq!(parse_instruction(&test_data_w5[0]),
                    (5, String::from("add word [bp + si + 1000], 29")));
     }
 }
