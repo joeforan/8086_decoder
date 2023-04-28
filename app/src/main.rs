@@ -277,38 +277,40 @@ fn parse_acc_instruction(opcode: u8, data: &[u8]) -> (usize, String) {
     }
 }
 
-fn parse_instruction(data: &[u8]) -> (usize, String)
-{
-    let mut offset: usize = 2;
-    let opcode = get_opcode(data[0]);
+fn parse_std_instruction(opcode: u8, data: &[u8]) -> (usize, String) {
     let oc_mnmnc = get_opcode_mnemonic(opcode);
     let w_flag = (data[0] & W_MASK) >> W_SHFT;
+    let d_flag = (data[0] & D_MASK) >> D_SHFT;
+    let reg_code = (data[1] & REG_MASK) >> REG_SHFT;
     let mod_code = (data[1] & MOD_MASK) >> MOD_SHFT;
     let r_m_code = (data[1] & RM_MASK) >> RM_SHFT;
-    let reg_code = (data[1] & REG_MASK) >> REG_SHFT;
 
+    let reg_string = get_reg_str(w_flag, reg_code);
+    let mut offset: usize = 2;
+
+    let rm_string = match mod_code {
+        0b11 => get_reg_str(w_flag, r_m_code),
+        _ => {
+            let t = get_mem_ptr_and_displacement(data, r_m_code, mod_code);
+            offset += t.0;
+            t.1
+        }
+    };
+    match d_flag {
+        0 => (offset, String::from(format!("{} {}, {}", oc_mnmnc, rm_string, reg_string))),
+        1 => (offset, String::from(format!("{} {}, {}", oc_mnmnc, reg_string, rm_string))),
+        _ => unreachable!()
+    }
+}
+
+fn parse_instruction(data: &[u8]) -> (usize, String)
+{
+    let opcode = get_opcode(data[0]);
     match get_opcode_type(opcode) {
         OpcodeType::RegMov => parse_reg_mov(opcode, data),
         OpcodeType::Rm => parse_rm_instruction(opcode, data),
         OpcodeType::Acc =>  parse_acc_instruction(opcode, data),
-        OpcodeType::Standard => {
-            let d_flag = (data[0] & D_MASK) >> D_SHFT;
-
-            let reg_string = get_reg_str(w_flag, reg_code);
-            let rm_string = match mod_code {
-                0b11 => get_reg_str(w_flag, r_m_code),
-                _ => {
-                    let t = get_mem_ptr_and_displacement(data, r_m_code, mod_code);
-                    offset += t.0;
-                    t.1
-                }
-            };
-            match d_flag {
-                0 => (offset, String::from(format!("{} {}, {}", oc_mnmnc, rm_string, reg_string))),
-                1 => (offset, String::from(format!("{} {}, {}", oc_mnmnc, reg_string, rm_string))),
-                _ => unreachable!()
-            }
-        }
+        OpcodeType::Standard => parse_std_instruction(opcode, data)
     }
 }
 
