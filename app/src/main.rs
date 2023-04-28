@@ -244,12 +244,16 @@ fn parse_instruction(opcode: u8, data: &[u8]) -> (usize, String)
     } else if (opcode == MEM2ACC_MOV_OPCODE) | (opcode == ACC2MEM_MOV_OPCODE) | (opcode == IMM_ACC_ADD_OPCODE) {
         let w_flag = (data[0] & W_MASK) >> W_SHFT;
         let reg_string = get_reg_str(w_flag, 0b000);
-        let val = read_u16_val(&data[1..2+w_flag as usize]);
-        match opcode {
-            MEM2ACC_MOV_OPCODE => (3, String::from(format!("{} {}, [{}]", oc_mnmnc, reg_string, val))),
-            ACC2MEM_MOV_OPCODE => (3, String::from(format!("{} [{}], {}", oc_mnmnc, val, reg_string))),
-            IMM_ACC_ADD_OPCODE => (3, String::from(format!("{} {}, {}", oc_mnmnc,  reg_string, val))),
-            _ => unreachable!()
+        if (opcode == IMM_ACC_ADD_OPCODE) & (w_flag == 0) {
+            (2, String::from(format!("{} {}, {}", oc_mnmnc,  reg_string, data[1] as i8)))
+        } else {
+            let val = read_u16_val(&data[1..2+w_flag as usize]);
+            match opcode {
+                MEM2ACC_MOV_OPCODE => (3, String::from(format!("{} {}, [{}]", oc_mnmnc, reg_string, val))),
+                ACC2MEM_MOV_OPCODE => (3, String::from(format!("{} [{}], {}", oc_mnmnc, val, reg_string))),
+                IMM_ACC_ADD_OPCODE => (3, String::from(format!("{} {}, {}", oc_mnmnc,  reg_string, val))),
+                _ => unreachable!()
+            }
         }
     } else {
         let d_flag = (data[0] & D_MASK) >> D_SHFT;
