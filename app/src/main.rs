@@ -570,8 +570,10 @@ mod test {
         let test_data_w2: [[u8; 2]; 3] = [[0x02, 0x00],
                                           [0x01, 0xd8],
                                           [0x00, 0xe0]];
-        let test_data_w3: [[u8; 3]; 2] = [[0x80, 0x07, 0x22],
-                                          [0x03, 0x46, 0x00]];
+
+        let test_data_w3: [[u8; 3]; 3] = [[0x80, 0x07, 0x22],
+                                          [0x03, 0x46, 0x00],
+                                          [0x05, 0xe8, 0x03]];
         let test_data_w5: [[u8; 5]; 1] = [[0x83, 0x82, 0xe8, 0x03, 0x1d]];
 
         assert_eq!(parse_instruction(get_opcode(test_data_w2[0][0]), &test_data_w2[0]),
