@@ -23,7 +23,8 @@ enum Opcode {
     SubRm,
     SubAcc,
     CmpStd,
-    CmpRm
+    CmpRm,
+    CmpAcc
 }
 
 #[derive(PartialEq, Clone, Copy)]
@@ -40,7 +41,7 @@ enum TwoBitValue{
     TBV11 = 0b11
 }
 
-const NO_OPCODES: usize = 13;
+const NO_OPCODES: usize = 14;
 
 const REGS_BYTE: [&str; 8] = ["al", "cl", "dl", "bl", "ah", "ch", "dh", "bh"];
 const REGS_WORD: [&str; 8] = ["ax", "cx", "dx", "bx", "sp", "bp", "si", "di"];
@@ -88,7 +89,8 @@ fn get_opcode_mnemonic(opcode: Opcode) -> String
             MovAcc2Mem  => "mov",
 
             CmpStd |
-            CmpRm => "cmp"
+            CmpRm |
+            CmpAcc => "cmp"
         }
     )
 }
@@ -106,7 +108,8 @@ fn get_opcode_type(opcode: Opcode) -> OpcodeType {
         MovMem2Acc |
         MovAcc2Mem |
         AddAcc |
-        SubAcc => OpcodeType::Acc,
+        SubAcc |
+        CmpAcc => OpcodeType::Acc,
 
         MovStd |
         AddStd |
@@ -130,7 +133,8 @@ fn get_opcode(data: &[u8]) -> Opcode {
         (0x80, 0xFC, 0x28, 0x38, SubRm),
         (0x2C, 0xFE, 0, 0, SubAcc),
         (0x38, 0xFC, 0, 0, CmpStd),
-        (0x80, 0xFC, 0x38, 0x38, CmpRm)
+        (0x80, 0xFC, 0x38, 0x38, CmpRm),
+        (0x3c, 0xFE, 0, 0, CmpAcc)
     ];
 
     for t in LUT.iter() {
@@ -302,7 +306,9 @@ fn parse_acc_instruction(opcode: Opcode, data: &[u8]) -> (usize, String) {
     let w_flag = get_bit_value((data[0] & W_MASK) >> W_SHFT);
     let reg_string = get_reg_str(w_flag, 0b000);
     let oc_mnmnc = get_opcode_mnemonic(opcode);
-     if ((opcode == Opcode::AddAcc) | (opcode == Opcode::SubAcc)) & (w_flag == BitValue::BV0) {
+    if ((opcode == Opcode::AddAcc) |
+        (opcode == Opcode::SubAcc) |
+        (opcode == Opcode::CmpAcc)) & (w_flag == BitValue::BV0) {
         (2, String::from(format!("{} {}, {}", oc_mnmnc,  reg_string, data[1] as i8)))
     } else {
         let val = read_u16_val(&data[1..2+w_flag as usize]);
@@ -310,7 +316,8 @@ fn parse_acc_instruction(opcode: Opcode, data: &[u8]) -> (usize, String) {
             Opcode::MovMem2Acc => (3, String::from(format!("{} {}, [{}]", oc_mnmnc, reg_string, val))),
             Opcode::MovAcc2Mem => (3, String::from(format!("{} [{}], {}", oc_mnmnc, val, reg_string))),
             Opcode::AddAcc |
-            Opcode::SubAcc => (3, String::from(format!("{} {}, {}", oc_mnmnc,  reg_string, val))),
+            Opcode::SubAcc |
+            Opcode::CmpAcc => (3, String::from(format!("{} {}, {}", oc_mnmnc,  reg_string, val))),
             _ => unreachable!()
         }
     }
@@ -814,6 +821,42 @@ mod test {
                    (3, String::from("cmp [bp + si + 4], bh")));
         assert_eq!(parse_instruction(&test_data_w3[3]),
                    (3, String::from("cmp [bp + di + 6], di")));
+    }
+
+    #[test]
+    fn test_cmp_instructions_4 () {
+        let test_data_w2: [[u8; 2]; 5] = [[0x3a, 0x00],
+                                          [0x39, 0xd8],
+                                          [0x38, 0xe0],
+                                          [0x3c, 0xe2],
+                                          [0x3c, 0x09]];
+
+        let test_data_w3: [[u8; 3]; 3] = [[0x80, 0x3f, 0x22],
+                                          [0x3b, 0x46, 0x00],
+                                          [0x3d, 0xe8, 0x03]];
+        let test_data_w5: [[u8; 5]; 1] = [[0x83, 0x3e, 0xe2, 0x12, 0x1d]];
+
+        assert_eq!(parse_instruction(&test_data_w3[0]),
+                   (3, String::from("cmp byte [bx], 34")));
+        // assert_eq!(parse_instruction(&test_data_w5[0]),
+        //            (5, String::from("cmp word [4834], 29")));
+        assert_eq!(parse_instruction(&test_data_w3[1]),
+                   (3, String::from("cmp ax, [bp]")));
+
+        assert_eq!(parse_instruction(&test_data_w2[0]),
+                   (2, String::from("cmp al, [bx + si]")));
+        assert_eq!(parse_instruction(&test_data_w2[1]),
+                   (2, String::from("cmp ax, bx")));
+        assert_eq!(parse_instruction(&test_data_w2[2]),
+                   (2, String::from("cmp al, ah")));
+
+        assert_eq!(parse_instruction(&test_data_w3[2]),
+                   (3, String::from("cmp ax, 1000")));
+
+        assert_eq!(parse_instruction(&test_data_w2[3]),
+                   (2, String::from("cmp al, -30")));
+        assert_eq!(parse_instruction(&test_data_w2[4]),
+                   (2, String::from("cmp al, 9")));
     }
 
 
