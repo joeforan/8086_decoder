@@ -21,7 +21,9 @@ enum Opcode {
     AddAcc,
     SubStd,
     SubRm,
-    SubAcc
+    SubAcc,
+    CmpStd,
+    CmpRm
 }
 
 #[derive(PartialEq, Clone, Copy)]
@@ -38,7 +40,7 @@ enum TwoBitValue{
     TBV11 = 0b11
 }
 
-const NO_OPCODES: usize = 11;
+const NO_OPCODES: usize = 13;
 
 const REGS_BYTE: [&str; 8] = ["al", "cl", "dl", "bl", "ah", "ch", "dh", "bh"];
 const REGS_WORD: [&str; 8] = ["ax", "cx", "dx", "bx", "sp", "bp", "si", "di"];
@@ -83,7 +85,10 @@ fn get_opcode_mnemonic(opcode: Opcode) -> String
             MovReg |
             MovRm |
             MovMem2Acc |
-            MovAcc2Mem  => "mov"
+            MovAcc2Mem  => "mov",
+
+            CmpStd |
+            CmpRm => "cmp"
         }
     )
 }
@@ -95,7 +100,8 @@ fn get_opcode_type(opcode: Opcode) -> OpcodeType {
 
         MovRm |
         AddRm |
-        SubRm => OpcodeType::Rm,
+        SubRm |
+        CmpRm => OpcodeType::Rm,
 
         MovMem2Acc |
         MovAcc2Mem |
@@ -104,7 +110,8 @@ fn get_opcode_type(opcode: Opcode) -> OpcodeType {
 
         MovStd |
         AddStd |
-        SubStd => OpcodeType::Standard,
+        SubStd |
+        CmpStd => OpcodeType::Standard,
     }
 }
 
@@ -121,7 +128,9 @@ fn get_opcode(data: &[u8]) -> Opcode {
         (0x04, 0xFC, 0, 0, AddAcc),
         (0x28, 0xFC, 0, 0, SubStd),
         (0x80, 0xFC, 0x28, 0x38, SubRm),
-        (0x2C, 0xFE, 0, 0, SubAcc)
+        (0x2C, 0xFE, 0, 0, SubAcc),
+        (0x38, 0xFC, 0, 0, CmpStd),
+        (0x80, 0xFC, 0x38, 0x38, CmpRm)
     ];
 
     for t in LUT.iter() {
@@ -750,6 +759,25 @@ mod test {
                    (2, String::from("sub al, -30")));
         assert_eq!(parse_instruction(&test_data_w2[4]),
                    (2, String::from("sub al, 9")));
+    }
+
+    #[test]
+    fn test_cmp_instructions_1 () {
+        let test_data_w2: [[u8; 2]; 1] = [[0x3b, 0x18]];
+        let test_data_w3: [[u8; 3]; 4] = [[0x3b, 0x5e, 0x00],
+                                          [0x83, 0xfe, 0x02],
+                                          [0x83, 0xfd, 0x02],
+                                          [0x83, 0xf9, 0x08]];
+        assert_eq!(parse_instruction(&test_data_w2[0]),
+                   (2, String::from("cmp bx, [bx + si]")));
+        assert_eq!(parse_instruction(&test_data_w3[0]),
+                   (3, String::from("cmp bx, [bp]")));
+        assert_eq!(parse_instruction(&test_data_w3[1]),
+                   (3, String::from("cmp si, 2")));
+        assert_eq!(parse_instruction(&test_data_w3[2]),
+                   (3, String::from("cmp bp, 2")));
+        assert_eq!(parse_instruction(&test_data_w3[3]),
+                   (3, String::from("cmp cx, 8")));
     }
 
 
