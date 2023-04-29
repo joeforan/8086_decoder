@@ -780,5 +780,41 @@ mod test {
                    (3, String::from("cmp cx, 8")));
     }
 
+    #[test]
+    fn test_cmp_instructions_2 () {
+        let test_data_w3: [[u8; 3]; 4] = [[0x3b, 0x5e, 0x00],
+                                          [0x3b, 0x4f, 0x02],
+                                          [0x3a, 0x7a, 0x04],
+                                          [0x3b, 0x7b, 0x06]];
+        assert_eq!(parse_instruction(&test_data_w3[0]),
+                   (3, String::from("cmp bx, [bp]")));
+        assert_eq!(parse_instruction(&test_data_w3[1]),
+                   (3, String::from("cmp cx, [bx + 2]")));
+        assert_eq!(parse_instruction(&test_data_w3[2]),
+                   (3, String::from("cmp bh, [bp + si + 4]")));
+        assert_eq!(parse_instruction(&test_data_w3[3]),
+                   (3, String::from("cmp di, [bp + di + 6]")));
+    }
+
+    #[test]
+    fn test_cmp_instructions_3 () {
+        let test_data_w2: [[u8; 2]; 1] = [[0x39, 0x18]];
+        let test_data_w3: [[u8; 3]; 4] = [[0x39, 0x5e, 0x00],
+                                          [0x39, 0x4f, 0x02],
+                                          [0x38, 0x7a, 0x04],
+                                          [0x39, 0x7b, 0x06]];
+
+        assert_eq!(parse_instruction(&test_data_w2[0]),
+                   (2, String::from("cmp [bx + si], bx")));
+        assert_eq!(parse_instruction(&test_data_w3[0]),
+                   (3, String::from("cmp [bp], bx")));
+        assert_eq!(parse_instruction(&test_data_w3[1]),
+                   (3, String::from("cmp [bx + 2], cx")));
+        assert_eq!(parse_instruction(&test_data_w3[2]),
+                   (3, String::from("cmp [bp + si + 4], bh")));
+        assert_eq!(parse_instruction(&test_data_w3[3]),
+                   (3, String::from("cmp [bp + di + 6], di")));
+    }
+
 
 }
