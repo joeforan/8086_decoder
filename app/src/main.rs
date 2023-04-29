@@ -1215,4 +1215,29 @@ mod test {
         assert_eq!(parse_instruction(&[0x1f]),
                    (1, String::from("pop ds")));
     }
+
+    #[test]
+    fn test_xchg_instructions() {
+        assert_eq!(parse_instruction(&[0x87, 0x86, 0x18, 0xfc]),
+                   (4, String::from("xchg ax, [bp - 1000]")));
+        assert_eq!(parse_instruction(&[0x87, 0x6f, 0x32]),
+                   (3, String::from("xchg [bx + 50], bp")));
+        assert_eq!(parse_instruction(&[0x90]),
+                   (1, String::from("xchg ax, ax")));
+        assert_eq!(parse_instruction(&[0x92]),
+                   (1, String::from("xchg ax, dx")));
+        assert_eq!(parse_instruction(&[0x94]),
+                   (1, String::from("xchg ax, sp")));
+        assert_eq!(parse_instruction(&[0x96]),
+                   (1, String::from("xchg ax, si")));
+        assert_eq!(parse_instruction(&[0x97]),
+                   (1, String::from("xchg ax, di")));
+        assert_eq!(parse_instruction(&[0x87, 0xca]),
+                   (2, String::from("xchg cx, dx")));
+        assert_eq!(parse_instruction(&[0x87, 0xf1]),
+                   (2, String::from("xchg si, cx")));
+        assert_eq!(parse_instruction(&[0x86, 0xcc]),
+                   (2, String::from("xchg cl, ah")));
+    }
+
 }
