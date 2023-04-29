@@ -20,7 +20,8 @@ enum Opcode {
     AddRm,
     AddAcc,
     SubStd,
-    SubRm
+    SubRm,
+    SubAcc
 }
 
 #[derive(PartialEq, Clone, Copy)]
@@ -37,7 +38,7 @@ enum TwoBitValue{
     TBV11 = 0b11
 }
 
-const NO_OPCODES: usize = 10;
+const NO_OPCODES: usize = 11;
 
 const REGS_BYTE: [&str; 8] = ["al", "cl", "dl", "bl", "ah", "ch", "dh", "bh"];
 const REGS_WORD: [&str; 8] = ["ax", "cx", "dx", "bx", "sp", "bp", "si", "di"];
@@ -75,7 +76,8 @@ fn get_opcode_mnemonic(opcode: Opcode) -> String
             AddStd | AddRm | AddAcc => "add",
 
             SubStd |
-            SubRm => "sub",
+            SubRm |
+            SubAcc => "sub",
 
             MovStd |
             MovReg |
@@ -97,7 +99,8 @@ fn get_opcode_type(opcode: Opcode) -> OpcodeType {
 
         MovMem2Acc |
         MovAcc2Mem |
-        AddAcc => OpcodeType::Acc,
+        AddAcc |
+        SubAcc => OpcodeType::Acc,
 
         MovStd |
         AddStd |
@@ -117,7 +120,9 @@ fn get_opcode(data: &[u8]) -> Opcode {
         (0x80, 0xFC, 0, 0x38, AddRm),
         (0x04, 0xFC, 0, 0, AddAcc),
         (0x28, 0xFC, 0, 0, SubStd),
-        (0x80, 0xFC, 0x28, 0x38, SubRm)];
+        (0x80, 0xFC, 0x28, 0x38, SubRm),
+        (0x2C, 0xFE, 0, 0, SubAcc)
+    ];
 
     for t in LUT.iter() {
         if (data[0] & t.1 == t.0) &
@@ -288,14 +293,15 @@ fn parse_acc_instruction(opcode: Opcode, data: &[u8]) -> (usize, String) {
     let w_flag = get_bit_value((data[0] & W_MASK) >> W_SHFT);
     let reg_string = get_reg_str(w_flag, 0b000);
     let oc_mnmnc = get_opcode_mnemonic(opcode);
-     if (opcode == Opcode::AddAcc) & (w_flag == BitValue::BV0) {
+     if ((opcode == Opcode::AddAcc) | (opcode == Opcode::SubAcc)) & (w_flag == BitValue::BV0) {
         (2, String::from(format!("{} {}, {}", oc_mnmnc,  reg_string, data[1] as i8)))
     } else {
         let val = read_u16_val(&data[1..2+w_flag as usize]);
         match opcode {
             Opcode::MovMem2Acc => (3, String::from(format!("{} {}, [{}]", oc_mnmnc, reg_string, val))),
             Opcode::MovAcc2Mem => (3, String::from(format!("{} [{}], {}", oc_mnmnc, val, reg_string))),
-            Opcode::AddAcc => (3, String::from(format!("{} {}, {}", oc_mnmnc,  reg_string, val))),
+            Opcode::AddAcc |
+            Opcode::SubAcc => (3, String::from(format!("{} {}, {}", oc_mnmnc,  reg_string, val))),
             _ => unreachable!()
         }
     }
@@ -673,5 +679,78 @@ mod test {
         assert_eq!(parse_instruction(&test_data_w3[3]),
                    (3, String::from("sub cx, 8")));
     }
+
+    #[test]
+    fn test_sub_instructions_2 () {
+        let test_data_w3: [[u8; 3]; 4] = [[0x2b, 0x5e, 0x00],
+                                          [0x2b, 0x4f, 0x02],
+                                          [0x2a, 0x7a, 0x04],
+                                          [0x2b, 0x7b, 0x06]];
+        assert_eq!(parse_instruction(&test_data_w3[0]),
+                   (3, String::from("sub bx, [bp]")));
+        assert_eq!(parse_instruction(&test_data_w3[1]),
+                   (3, String::from("sub cx, [bx + 2]")));
+        assert_eq!(parse_instruction(&test_data_w3[2]),
+                   (3, String::from("sub bh, [bp + si + 4]")));
+        assert_eq!(parse_instruction(&test_data_w3[3]),
+                   (3, String::from("sub di, [bp + di + 6]")));
+    }
+
+    #[test]
+    fn test_sub_instructions_3 () {
+        let test_data_w2: [[u8; 2]; 1] = [[0x29, 0x18]];
+        let test_data_w3: [[u8; 3]; 4] = [[0x29, 0x5e, 0x00],
+                                          [0x29, 0x4f, 0x02],
+                                          [0x28, 0x7a, 0x04],
+                                          [0x29, 0x7b, 0x06]];
+
+        assert_eq!(parse_instruction(&test_data_w2[0]),
+                   (2, String::from("sub [bx + si], bx")));
+        assert_eq!(parse_instruction(&test_data_w3[0]),
+                   (3, String::from("sub [bp], bx")));
+        assert_eq!(parse_instruction(&test_data_w3[1]),
+                   (3, String::from("sub [bx + 2], cx")));
+        assert_eq!(parse_instruction(&test_data_w3[2]),
+                   (3, String::from("sub [bp + si + 4], bh")));
+        assert_eq!(parse_instruction(&test_data_w3[3]),
+                   (3, String::from("sub [bp + di + 6], di")));
+    }
+
+    #[test]
+    fn test_sub_instructions_4 () {
+        let test_data_w2: [[u8; 2]; 5] = [[0x2a, 0x00],
+                                          [0x29, 0xd8],
+                                          [0x28, 0xe0],
+                                          [0x2c, 0xe2],
+                                          [0x2c, 0x09]];
+
+        let test_data_w3: [[u8; 3]; 4] = [[0x80, 0x2f, 0x22],
+                                          [0x83, 0x29, 0x1d],
+                                          [0x2b, 0x46, 0x00],
+                                          [0x2d, 0xe8, 0x03]];
+
+        assert_eq!(parse_instruction(&test_data_w3[0]),
+                   (3, String::from("sub byte [bx], 34")));
+        assert_eq!(parse_instruction(&test_data_w3[1]),
+                   (3, String::from("sub word [bx + di], 29")));
+        assert_eq!(parse_instruction(&test_data_w3[2]),
+                   (3, String::from("sub ax, [bp]")));
+
+        assert_eq!(parse_instruction(&test_data_w2[0]),
+                   (2, String::from("sub al, [bx + si]")));
+        assert_eq!(parse_instruction(&test_data_w2[1]),
+                   (2, String::from("sub ax, bx")));
+        assert_eq!(parse_instruction(&test_data_w2[2]),
+                   (2, String::from("sub al, ah")));
+
+        assert_eq!(parse_instruction(&test_data_w3[3]),
+                   (3, String::from("sub ax, 1000")));
+
+        assert_eq!(parse_instruction(&test_data_w2[3]),
+                   (2, String::from("sub al, -30")));
+        assert_eq!(parse_instruction(&test_data_w2[4]),
+                   (2, String::from("sub al, 9")));
+    }
+
 
 }
