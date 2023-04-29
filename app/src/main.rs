@@ -273,7 +273,8 @@ fn parse_rm_instruction(opcode: Opcode, data: &[u8]) -> (usize, String) {
 
     if mod_code != TBV11 {
         let (data_offset, reg_string) = get_mem_ptr_and_displacement(data, r_m_code, mod_code);
-        let data_idx: usize = if (mod_code == TBV01) || (mod_code == TBV10) { 4 } else { 2 };
+        let data_idx: usize = if (mod_code == TBV01) || (mod_code == TBV10) ||
+            ((mod_code == TBV00) & (r_m_code == 0b110)) { 4 } else { 2 };
         if opcode == Opcode::MovRm {
             return match w_flag {
                 BitValue::BV0 =>  (data_offset + 3, String::from(format!("{} {}, byte {}", oc_mnmnc, reg_string, data[data_idx]))),
@@ -838,8 +839,8 @@ mod test {
 
         assert_eq!(parse_instruction(&test_data_w3[0]),
                    (3, String::from("cmp byte [bx], 34")));
-        // assert_eq!(parse_instruction(&test_data_w5[0]),
-        //            (5, String::from("cmp word [4834], 29")));
+        assert_eq!(parse_instruction(&test_data_w5[0]),
+                   (5, String::from("cmp word [4834], 29")));
         assert_eq!(parse_instruction(&test_data_w3[1]),
                    (3, String::from("cmp ax, [bp]")));
 
