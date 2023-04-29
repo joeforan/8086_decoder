@@ -1117,4 +1117,36 @@ mod test {
         assert_eq!(parse_instruction(&test_data[23]),
                    (2, String::from("jcxz #OFFSET# -40")));
     }
+
+    #[test]
+    fn test_push_pop_instructions() {
+        assert_eq!(parse_instruction(&[0xff, 0x32]),
+                   (2, String::from("push word [bp + si]")));
+        assert_eq!(parse_instruction(&[0xff, 0x36, 0xb8, 0x0b]),
+                   (4, String::from("push word [3000]")));
+        assert_eq!(parse_instruction(&[0xff, 0x71, 0xe2]),
+                   (3, String::from("push word [bx + di - 30]")));
+        assert_eq!(parse_instruction(&[0x51]),
+                   (1, String::from("push cx")));
+        assert_eq!(parse_instruction(&[0x50]),
+                   (1, String::from("push ax")));
+        assert_eq!(parse_instruction(&[0x52]),
+                   (1, String::from("push dx")));
+        assert_eq!(parse_instruction(&[0x0e]),
+                   (1, String::from("push cs")));
+        assert_eq!(parse_instruction(&[0x8f, 0x02]),
+                   (2, String::from("pop word [bp + si]")));
+        assert_eq!(parse_instruction(&[0x8f, 0x06, 0x03, 0x00]),
+                   (4, String::from("pop word [3]")));
+        assert_eq!(parse_instruction(&[0x8f, 0x81, 0x48, 0xf4]),
+                   (4, String::from("pop word [bx + di - 3000]")));
+        assert_eq!(parse_instruction(&[0x5c]),
+                   (1, String::from("pop sp")));
+        assert_eq!(parse_instruction(&[0x5f]),
+                   (1, String::from("pop di")));
+        assert_eq!(parse_instruction(&[0x5e]),
+                   (1, String::from("pop si")));
+        assert_eq!(parse_instruction(&[0x1f]),
+                   (1, String::from("pop ds")));
+    }
 }
