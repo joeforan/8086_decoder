@@ -11,7 +11,8 @@ enum OpcodeType
     Rm,
     Acc,
     Standard,
-    Jump
+    Jump,
+    PushPop,
 }
 
 #[derive(PartialEq, Clone, Copy)]
@@ -49,7 +50,13 @@ enum Opcode {
     Loop,
     Loopz,
     Loopnz,
-    Jcxz
+    Jcxz,
+    PushRm,
+    PushReg,
+    PushSr,
+    PopRm,
+    PopReg,
+    PopSr
 }
 
 #[derive(PartialEq, Clone, Copy)]
@@ -66,10 +73,7 @@ enum TwoBitValue{
     TBV11 = 0b11
 }
 
-const NO_OPCODES: usize = 34;
-
-const REGS_BYTE: [&str; 8] = ["al", "cl", "dl", "bl", "ah", "ch", "dh", "bh"];
-const REGS_WORD: [&str; 8] = ["ax", "cx", "dx", "bx", "sp", "bp", "si", "di"];
+const NO_OPCODES: usize = 40;
 
 const D_MASK: u8 = 0x02;
 const D_SHFT: u8 = 1;
@@ -136,7 +140,15 @@ fn get_opcode_mnemonic(opcode: Opcode) -> String
             Loop => "loop",
             Loopz => "loopz",
             Loopnz => "loopnz",
-            Jcxz => "jcxz"
+            Jcxz => "jcxz",
+
+            PushRm |
+            PushReg |
+            PushSr => "push",
+
+            PopRm |
+            PopReg |
+            PopSr => "pop"
         }
     )
 }
@@ -181,54 +193,69 @@ fn get_opcode_type(opcode: Opcode) -> OpcodeType {
         Loop |
         Loopz |
         Loopnz |
-        Jcxz => OpcodeType::Jump
+        Jcxz => OpcodeType::Jump,
+
+        PushRm |
+        PushReg |
+        PushSr |
+        PopRm |
+        PopReg |
+        PopSr => OpcodeType::PushPop
     }
 }
 
 fn get_opcode(data: &[u8]) -> Opcode {
     use Opcode::*;
     const LUT: [(u8, u8, u8, u8, Opcode); NO_OPCODES] = [
-        (0x88, 0xFC, 0, 0, MovStd),
-        (0xB0, 0xF0, 0, 0, MovReg),
-        (0xc6, 0xFE, 0, 0, MovRm),
-        (0xA0, 0xFE, 0, 0, MovMem2Acc),
-        (0xA2, 0xFE, 0, 0, MovAcc2Mem),
-        (0x00, 0xFC, 0, 0, AddStd),
-        (0x80, 0xFC, 0, 0x38, AddRm),
-        (0x04, 0xFC, 0, 0, AddAcc),
-        (0x28, 0xFC, 0, 0, SubStd),
+        (0x88, 0xFC, 0x00, 0x00, MovStd),
+        (0xB0, 0xF0, 0x00, 0x00, MovReg),
+        (0xc6, 0xFE, 0x00, 0x00, MovRm),
+        (0xA0, 0xFE, 0x00, 0x00, MovMem2Acc),
+        (0xA2, 0xFE, 0x00, 0x00, MovAcc2Mem),
+        (0x00, 0xFC, 0x00, 0x00, AddStd),
+        (0x80, 0xFC, 0x00, 0x38, AddRm),
+        (0x04, 0xFC, 0x00, 0x00, AddAcc),
+        (0x28, 0xFC, 0x00, 0x00, SubStd),
         (0x80, 0xFC, 0x28, 0x38, SubRm),
-        (0x2C, 0xFE, 0, 0, SubAcc),
-        (0x38, 0xFC, 0, 0, CmpStd),
+        (0x2C, 0xFE, 0x00, 0x00, SubAcc),
+        (0x38, 0xFC, 0x00, 0x00, CmpStd),
         (0x80, 0xFC, 0x38, 0x38, CmpRm),
-        (0x3c, 0xFE, 0, 0, CmpAcc),
-        (0x75, 0xFF, 0, 0, Jnz),
-        (0x74, 0xFF, 0, 0, Je),
-        (0x7C, 0xFF, 0, 0, Jl),
-        (0x7E, 0xFF, 0, 0, Jle),
-        (0x72, 0xFF, 0, 0, Jb),
-        (0x76, 0xFF, 0, 0, Jbe),
-        (0x7A, 0xFF, 0, 0, Jp),
-        (0x70, 0xFF, 0, 0, Jo),
-        (0x78, 0xFF, 0, 0, Js),
-        (0x7D, 0xFF, 0, 0, Jnl),
-        (0x7F, 0xFF, 0, 0, Jg),
-        (0x73, 0xFF, 0, 0, Jnb),
-        (0x77, 0xFF, 0, 0, Ja),
-        (0x7B, 0xFF, 0, 0, Jnp),
-        (0x71, 0xFF, 0, 0, Jno),
-        (0x79, 0xFF, 0, 0, Jns),
-        (0xE2, 0xFF, 0, 0, Loop),
-        (0xE1, 0xFF, 0, 0, Loopz),
-        (0xE0, 0xFF, 0, 0, Loopnz),
-        (0xE3, 0xFF, 0, 0, Jcxz)
+        (0x3c, 0xFE, 0x00, 0x00, CmpAcc),
+        (0x75, 0xFF, 0x00, 0x00, Jnz),
+        (0x74, 0xFF, 0x00, 0x00, Je),
+        (0x7C, 0xFF, 0x00, 0x00, Jl),
+        (0x7E, 0xFF, 0x00, 0x00, Jle),
+        (0x72, 0xFF, 0x00, 0x00, Jb),
+        (0x76, 0xFF, 0x00, 0x00, Jbe),
+        (0x7A, 0xFF, 0x00, 0x00, Jp),
+        (0x70, 0xFF, 0x00, 0x00, Jo),
+        (0x78, 0xFF, 0x00, 0x00, Js),
+        (0x7D, 0xFF, 0x00, 0x00, Jnl),
+        (0x7F, 0xFF, 0x00, 0x00, Jg),
+        (0x73, 0xFF, 0x00, 0x00, Jnb),
+        (0x77, 0xFF, 0x00, 0x00, Ja),
+        (0x7B, 0xFF, 0x00, 0x00, Jnp),
+        (0x71, 0xFF, 0x00, 0x00, Jno),
+        (0x79, 0xFF, 0x00, 0x00, Jns),
+        (0xE2, 0xFF, 0x00, 0x00, Loop),
+        (0xE1, 0xFF, 0x00, 0x00, Loopz),
+        (0xE0, 0xFF, 0x00, 0x00, Loopnz),
+        (0xE3, 0xFF, 0x00, 0x00, Jcxz),
+        (0xFF, 0xFF, 0x00, 0x00, PushRm),
+        (0x50, 0xF8, 0x00, 0x00, PushReg),
+        (0x06, 0xE7, 0x00, 0x00, PushSr),
+        (0x8F, 0xFF, 0x00, 0x00, PopRm),
+        (0x58, 0xF8, 0x00, 0x00, PopReg),
+        (0x03, 0xE3, 0x00, 0x00, PopSr)
     ];
 
     for t in LUT.iter() {
-        if (data[0] & t.1 == t.0) &
-            ((t.3 == 0) |
-             ((data[1] & t.3) == t.2)) {
-            return t.4;
+        if data[0] & t.1 == t.0 {
+            if t.3 == 0 {
+                return t.4;
+            } else if (data[1] & t.3) == t.2 {
+                return t.4;
+            }
         }
     }
     panic!("Unknown opcode {}", data[0])
@@ -255,9 +282,23 @@ fn get_two_bit_value(b: u8) -> TwoBitValue {
     }
 }
 
+fn get_seg_reg_str(code: TwoBitValue) -> String
+{
+    use TwoBitValue::*;
+    String::from(match code {
+        TBV00 => "es",
+        TBV01 => "cs",
+        TBV10 => "ss",
+        TBV11 => "ds"
+    })
+}
+
 fn get_reg_str(flag: BitValue,
                code: u8) -> String
 {
+    const REGS_BYTE: [&str; 8] = ["al", "cl", "dl", "bl", "ah", "ch", "dh", "bh"];
+    const REGS_WORD: [&str; 8] = ["ax", "cx", "dx", "bx", "sp", "bp", "si", "di"];
+
     String::from(
         match flag {
             BitValue::BV0 => REGS_BYTE[code as usize],
@@ -446,6 +487,31 @@ fn parse_jmp_instruction(opcode: Opcode, data: &[u8]) -> (usize, String) {
     (2, String::from(format!("{} {} {}", oc_mnmc, OFFSET_STR, jump_offset)))
 }
 
+fn parse_pushpop_instruction(opcode: Opcode, data: &[u8]) -> (usize, String) {
+    use Opcode::*;
+    use BitValue::*;
+
+    let oc_mnmc = get_opcode_mnemonic(opcode);
+    match opcode {
+        PushRm | PopRm => {
+            let mod_code = get_two_bit_value((data[1] & MOD_MASK) >> MOD_SHFT);
+            let r_m_code = (data[1] & RM_MASK) >> RM_SHFT;
+            let t = get_mem_ptr_and_displacement(data, r_m_code, mod_code);
+            (2 + t.0, String::from(format!("{} word {}", oc_mnmc, t.1)))
+        },
+        PushReg | PopReg => {
+            let reg_string = get_reg_str(BV1, data[0] & 0x7);
+            (1, String::from(format!{"{} {}", oc_mnmc, reg_string}))
+        },
+        PushSr | PopSr => {
+            let reg_string = get_seg_reg_str(
+                get_two_bit_value((data[0] & 0x18) >> 3));
+            (1, String::from(format!{"{} {}", oc_mnmc, reg_string}))
+        },
+        _ => unreachable!()
+    }
+}
+
 fn parse_instruction(data: &[u8]) -> (usize, String)
 {
     let opcode = get_opcode(data);
@@ -454,8 +520,8 @@ fn parse_instruction(data: &[u8]) -> (usize, String)
         OpcodeType::Rm => parse_rm_instruction(opcode, data),
         OpcodeType::Acc =>  parse_acc_instruction(opcode, data),
         OpcodeType::Standard => parse_std_instruction(opcode, data),
-        OpcodeType::Jump => parse_jmp_instruction(opcode, data)
-
+        OpcodeType::Jump => parse_jmp_instruction(opcode, data),
+        OpcodeType::PushPop  => parse_pushpop_instruction(opcode, data)
     }
 }
 
