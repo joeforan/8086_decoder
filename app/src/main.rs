@@ -29,7 +29,26 @@ enum Opcode {
     CmpStd,
     CmpRm,
     CmpAcc,
-    Jnz
+    Jnz,
+    Je,
+    Jl,
+    Jle,
+    Jb,
+    Jbe,
+    Jp,
+    Jo,
+    Js,
+    Jnl,
+    Jg,
+    Jnb,
+    Ja,
+    Jnp,
+    Jno,
+    Jns,
+    Loop,
+    Loopz,
+    Loopnz,
+    Jcxz
 }
 
 #[derive(PartialEq, Clone, Copy)]
@@ -46,7 +65,7 @@ enum TwoBitValue{
     TBV11 = 0b11
 }
 
-const NO_OPCODES: usize = 15;
+const NO_OPCODES: usize = 34;
 
 const REGS_BYTE: [&str; 8] = ["al", "cl", "dl", "bl", "ah", "ch", "dh", "bh"];
 const REGS_WORD: [&str; 8] = ["ax", "cx", "dx", "bx", "sp", "bp", "si", "di"];
@@ -97,7 +116,26 @@ fn get_opcode_mnemonic(opcode: Opcode) -> String
             CmpRm |
             CmpAcc => "cmp",
 
-            Jnz => "jnz"
+            Jnz => "jnz",
+            Je => "je",
+            Jl => "jl",
+            Jle => "jle",
+            Jb => "jb",
+            Jbe => "jbe",
+            Jp => "jp",
+            Jo => "jo",
+            Js => "js",
+            Jnl => "jnl",
+            Jg => "jg",
+            Jnb => "jnb",
+            Ja => "ja",
+            Jnp => "jnp",
+            Jno => "jno",
+            Jns => "jns",
+            Loop => "loop",
+            Loopz => "loopz",
+            Loopnz => "loopnz",
+            Jcxz => "jcxz"
         }
     )
 }
@@ -123,7 +161,26 @@ fn get_opcode_type(opcode: Opcode) -> OpcodeType {
         SubStd |
         CmpStd => OpcodeType::Standard,
 
-        Jnz => OpcodeType::Jump
+        Jnz |
+        Je |
+        Jl |
+        Jle |
+        Jb |
+        Jbe |
+        Jp |
+        Jo |
+        Js |
+        Jnl |
+        Jg |
+        Jnb |
+        Ja |
+        Jnp |
+        Jno |
+        Jns |
+        Loop |
+        Loopz |
+        Loopnz |
+        Jcxz => OpcodeType::Jump
     }
 }
 
@@ -144,7 +201,26 @@ fn get_opcode(data: &[u8]) -> Opcode {
         (0x38, 0xFC, 0, 0, CmpStd),
         (0x80, 0xFC, 0x38, 0x38, CmpRm),
         (0x3c, 0xFE, 0, 0, CmpAcc),
-        (0x75, 0xFF, 0, 0, Jnz)
+        (0x75, 0xFF, 0, 0, Jnz),
+        (0x74, 0xFF, 0, 0, Je),
+        (0x7C, 0xFF, 0, 0, Jl),
+        (0x7E, 0xFF, 0, 0, Jle),
+        (0x72, 0xFF, 0, 0, Jb),
+        (0x76, 0xFF, 0, 0, Jbe),
+        (0x7A, 0xFF, 0, 0, Jp),
+        (0x70, 0xFF, 0, 0, Jo),
+        (0x78, 0xFF, 0, 0, Js),
+        (0x7D, 0xFF, 0, 0, Jnl),
+        (0x7F, 0xFF, 0, 0, Jg),
+        (0x73, 0xFF, 0, 0, Jnb),
+        (0x77, 0xFF, 0, 0, Ja),
+        (0x7B, 0xFF, 0, 0, Jnp),
+        (0x71, 0xFF, 0, 0, Jno),
+        (0x79, 0xFF, 0, 0, Jns),
+        (0xE2, 0xFF, 0, 0, Loop),
+        (0xE1, 0xFF, 0, 0, Loopz),
+        (0xE0, 0xFF, 0, 0, Loopnz),
+        (0xE3, 0xFF, 0, 0, Jcxz)
     ];
 
     for t in LUT.iter() {
@@ -885,9 +961,78 @@ mod test {
 
     #[test]
     fn test_jnz_instructions() {
-        let test_data: [[u8; 2]; 1] = [[0x75, 0x02]];
-        assert_eq!(parse_instruction(&test_data[0]),
-                   (2, String::from("jnz #OFFSET# 2")))
+        let test_data: [[u8; 2]; 24] = [[0x75, 0x02],
+                                        [0x75, 0xfc],
+                                        [0x75, 0xfa],
+                                        [0x75, 0xfc],
+                                        [0x74, 0xfe],
+                                        [0x7c, 0xfc],
+                                        [0x7e, 0xfa],
+                                        [0x72, 0xf8],
+                                        [0x76, 0xf6],
+                                        [0x7a, 0xf4],
+                                        [0x70, 0xf2],
+                                        [0x78, 0xf0],
+                                        [0x75, 0xee],
+                                        [0x7d, 0xec],
+                                        [0x7f, 0xea],
+                                        [0x73, 0xe8],
+                                        [0x77, 0xe6],
+                                        [0x7b, 0xe4],
+                                        [0x71, 0xe2],
+                                        [0x79, 0xe0],
+                                        [0xe2, 0xde],
+                                        [0xe1, 0xdc],
+                                        [0xe0, 0xda],
+                                        [0xe3, 0xd8]];
 
+        assert_eq!(parse_instruction(&test_data[0]),
+                   (2, String::from("jnz #OFFSET# 2")));
+        assert_eq!(parse_instruction(&test_data[1]),
+                   (2, String::from("jnz #OFFSET# -4")));
+        assert_eq!(parse_instruction(&test_data[2]),
+                   (2, String::from("jnz #OFFSET# -6")));
+        assert_eq!(parse_instruction(&test_data[3]),
+                   (2, String::from("jnz #OFFSET# -4")));
+        assert_eq!(parse_instruction(&test_data[4]),
+                   (2, String::from("je #OFFSET# -2")));
+        assert_eq!(parse_instruction(&test_data[5]),
+                   (2, String::from("jl #OFFSET# -4")));
+        assert_eq!(parse_instruction(&test_data[6]),
+                   (2, String::from("jle #OFFSET# -6")));
+        assert_eq!(parse_instruction(&test_data[7]),
+                   (2, String::from("jb #OFFSET# -8")));
+        assert_eq!(parse_instruction(&test_data[8]),
+                   (2, String::from("jbe #OFFSET# -10")));
+        assert_eq!(parse_instruction(&test_data[9]),
+                   (2, String::from("jp #OFFSET# -12")));
+        assert_eq!(parse_instruction(&test_data[10]),
+                   (2, String::from("jo #OFFSET# -14")));
+        assert_eq!(parse_instruction(&test_data[11]),
+                   (2, String::from("js #OFFSET# -16")));
+        assert_eq!(parse_instruction(&test_data[12]),
+                   (2, String::from("jnz #OFFSET# -18")));
+        assert_eq!(parse_instruction(&test_data[13]),
+                   (2, String::from("jnl #OFFSET# -20")));
+        assert_eq!(parse_instruction(&test_data[14]),
+                   (2, String::from("jg #OFFSET# -22")));
+        assert_eq!(parse_instruction(&test_data[15]),
+                   (2, String::from("jnb #OFFSET# -24")));
+        assert_eq!(parse_instruction(&test_data[16]),
+                   (2, String::from("ja #OFFSET# -26")));
+        assert_eq!(parse_instruction(&test_data[17]),
+                   (2, String::from("jnp #OFFSET# -28")));
+        assert_eq!(parse_instruction(&test_data[18]),
+                   (2, String::from("jno #OFFSET# -30")));
+        assert_eq!(parse_instruction(&test_data[19]),
+                   (2, String::from("jns #OFFSET# -32")));
+        assert_eq!(parse_instruction(&test_data[20]),
+                   (2, String::from("loop #OFFSET# -34")));
+        assert_eq!(parse_instruction(&test_data[21]),
+                   (2, String::from("loopz #OFFSET# -36")));
+        assert_eq!(parse_instruction(&test_data[22]),
+                   (2, String::from("loopnz #OFFSET# -38")));
+        assert_eq!(parse_instruction(&test_data[23]),
+                   (2, String::from("jcxz #OFFSET# -40")));
     }
 }
