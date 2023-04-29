@@ -1,5 +1,6 @@
 use std::env::args;
 use std::fs::read;
+use std::collections::{BTreeSet, HashMap};
 
 
 const OFFSET_STR: &str = "#OFFSET#";
@@ -467,20 +468,58 @@ fn decode_from_file(filepath: &String) -> String {
 fn decode_from_data(data: &[u8]) -> String {
     let n = data.len();
     let mut i = 0;
-    let mut lines: Vec<String> = Vec::new();
-    lines.push(String::from("bits 16"));
-    lines.push(String::from(""));
+    let mut lines: Vec<(String, Option<usize>, Option<usize>)> = Vec::new();
+    let mut labels: BTreeSet<usize> = BTreeSet::new();
+
+    lines.push((String::from("bits 16"), None, None));
+    lines.push((String::from(""), None, None));
+
     while i < n {
         let (offset, code): (usize, String) = {
             parse_instruction(&data[i..n])
         };
-        lines.push(code);
+
+        let (codestr, dst) = match code.find(OFFSET_STR) {
+            Some(idx) => {
+                let mut modified_line = String::from(&code[0..idx]);
+                let jump_offset: i8 = code[idx+9..].parse::<i8>().unwrap();
+                let jump_address: usize = (i as isize + offset as isize + jump_offset as isize) as usize;
+                labels.insert(jump_address);
+                (modified_line, Some(jump_address))
+            }
+            None => (code, None)
+        };
+        lines.push((codestr, Some(i), dst));
         i += offset;
+
     }
+    let mut label_map = HashMap::<usize, String>::new();
+
+    for (label_no, label_address) in labels.iter().enumerate() {
+        let label_string = String::from(format!("label_{}", label_no));
+        label_map.insert(*label_address, label_string);
+    }
+
     let mut ret: String = "".to_owned();
     for line in lines.iter() {
-        ret.push_str(line);
-        ret.push_str("\n");
+        let mut code = String::from(line.0.clone());
+        match line.1 {
+            Some(adr) => {
+                if label_map.contains_key(&adr) {
+                    ret.push_str(&format!("{}:\n", label_map[&adr]));
+                }
+            }
+            _ => {}
+        };
+        code.push_str(
+            &match line.2 {
+                None => {String::from("\n")},
+                Some(adr) => {
+                    format!("{}\n", label_map[&adr])
+                }
+            });
+
+        ret.push_str(&code);
     }
     ret
 }
@@ -586,22 +625,22 @@ mod test {
 
     #[test]
     fn test_decode_with_labels() {
-        let test_data: [u8; 46] = [
-            0x75, 0xfc, 0x75, 0xfa, 0x75, 0xfc, 0x74, 0xfe,
-            0x7c, 0xfc, 0x7e, 0xfa, 0x72, 0xf8, 0x76, 0xf6,
-            0x7a, 0xf4, 0x70, 0xf2, 0x78, 0xf0, 0x75, 0xee,
-            0x7d, 0xec, 0x7f, 0xea, 0x73, 0xe8, 0x77, 0xe6,
-            0x7b, 0xe4, 0x71, 0xe2, 0x79, 0xe0, 0xe2, 0xde,
-            0xe1, 0xdc, 0xe0, 0xda, 0xe3, 0xd8];
+        let test_data: [u8; 48] = [
+            0x75, 0x02, 0x75, 0xfc, 0x75, 0xfa, 0x75, 0xfc,
+            0x74, 0xfe, 0x7c, 0xfc, 0x7e, 0xfa, 0x72, 0xf8,
+            0x76, 0xf6, 0x7a, 0xf4, 0x70, 0xf2, 0x78, 0xf0,
+            0x75, 0xee, 0x7d, 0xec, 0x7f, 0xea, 0x73, 0xe8,
+            0x77, 0xe6, 0x7b, 0xe4, 0x71, 0xe2, 0x79, 0xe0,
+            0xe2, 0xde, 0xe1, 0xdc, 0xe0, 0xda, 0xe3, 0xd8];
 
         let expected =
             "bits 16\n\n\
              label_0:\n\
-             jnz test_label\n\
-             jnz test_label\n\
+             jnz label_1\n\
+             jnz label_0\n\
              label_1:\n\
-             jnz test_label\n\
-             jnz test_label\n\
+             jnz label_0\n\
+             jnz label_1\n\
              label_2:\n\
              je label_2\n\
              jl label_2\n\
@@ -611,14 +650,14 @@ mod test {
              jp label_2\n\
              jo label_2\n\
              js label_2\n\
-             jne label_2\n\
+             jnz label_2\n\
              jnl label_2\n\
              jg label_2\n\
              jnb label_2\n\
              ja label_2\n\
              jnp label_2\n\
              jno label_2\n\
-             s label_2\n\
+             jns label_2\n\
              loop label_2\n\
              loopz label_2\n\
              loopnz label_2\n\
