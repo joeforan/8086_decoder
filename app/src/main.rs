@@ -1,12 +1,16 @@
 use std::env::args;
 use std::fs::read;
 
+
+const OFFSET_STR: &str = "#OFFSET#";
+
 enum OpcodeType
 {
     RegMov,
     Rm,
     Acc,
-    Standard
+    Standard,
+    Jump
 }
 
 #[derive(PartialEq, Clone, Copy)]
@@ -24,7 +28,8 @@ enum Opcode {
     SubAcc,
     CmpStd,
     CmpRm,
-    CmpAcc
+    CmpAcc,
+    Jnz
 }
 
 #[derive(PartialEq, Clone, Copy)]
@@ -41,7 +46,7 @@ enum TwoBitValue{
     TBV11 = 0b11
 }
 
-const NO_OPCODES: usize = 14;
+const NO_OPCODES: usize = 15;
 
 const REGS_BYTE: [&str; 8] = ["al", "cl", "dl", "bl", "ah", "ch", "dh", "bh"];
 const REGS_WORD: [&str; 8] = ["ax", "cx", "dx", "bx", "sp", "bp", "si", "di"];
@@ -90,7 +95,9 @@ fn get_opcode_mnemonic(opcode: Opcode) -> String
 
             CmpStd |
             CmpRm |
-            CmpAcc => "cmp"
+            CmpAcc => "cmp",
+
+            Jnz => "jnz"
         }
     )
 }
@@ -115,6 +122,8 @@ fn get_opcode_type(opcode: Opcode) -> OpcodeType {
         AddStd |
         SubStd |
         CmpStd => OpcodeType::Standard,
+
+        Jnz => OpcodeType::Jump
     }
 }
 
@@ -134,7 +143,8 @@ fn get_opcode(data: &[u8]) -> Opcode {
         (0x2C, 0xFE, 0, 0, SubAcc),
         (0x38, 0xFC, 0, 0, CmpStd),
         (0x80, 0xFC, 0x38, 0x38, CmpRm),
-        (0x3c, 0xFE, 0, 0, CmpAcc)
+        (0x3c, 0xFE, 0, 0, CmpAcc),
+        (0x75, 0xFF, 0, 0, Jnz)
     ];
 
     for t in LUT.iter() {
@@ -353,6 +363,12 @@ fn parse_std_instruction(opcode: Opcode, data: &[u8]) -> (usize, String) {
     (offset, String::from(format!("{} {}, {}", oc_mnmnc, left, right)))
 }
 
+fn parse_jmp_instruction(opcode: Opcode, data: &[u8]) -> (usize, String) {
+    let jump_offset: i8 = data[1] as i8;
+    let oc_mnmc = get_opcode_mnemonic(opcode);
+    (2, String::from(format!("{} {} {}", oc_mnmc, OFFSET_STR, jump_offset)))
+}
+
 fn parse_instruction(data: &[u8]) -> (usize, String)
 {
     let opcode = get_opcode(data);
@@ -360,7 +376,9 @@ fn parse_instruction(data: &[u8]) -> (usize, String)
         OpcodeType::RegMov => parse_reg_mov(opcode, data),
         OpcodeType::Rm => parse_rm_instruction(opcode, data),
         OpcodeType::Acc =>  parse_acc_instruction(opcode, data),
-        OpcodeType::Standard => parse_std_instruction(opcode, data)
+        OpcodeType::Standard => parse_std_instruction(opcode, data),
+        OpcodeType::Jump => parse_jmp_instruction(opcode, data)
+
     }
 }
 
@@ -373,15 +391,20 @@ fn decode_from_file(filepath: &String) -> String {
 fn decode_from_data(data: &[u8]) -> String {
     let n = data.len();
     let mut i = 0;
-    let mut ret: String = "".to_owned();
-    ret.push_str("bits 16\n\n");
+    let mut lines: Vec<String> = Vec::new();
+    lines.push(String::from("bits 16"));
+    lines.push(String::from(""));
     while i < n {
         let (offset, code): (usize, String) = {
             parse_instruction(&data[i..n])
         };
-        ret.push_str(&code);
-        ret.push_str("\n");
+        lines.push(code);
         i += offset;
+    }
+    let mut ret: String = "".to_owned();
+    for line in lines.iter() {
+        ret.push_str(line);
+        ret.push_str("\n");
     }
     ret
 }
@@ -860,5 +883,11 @@ mod test {
                    (2, String::from("cmp al, 9")));
     }
 
+    #[test]
+    fn test_jnz_instructions() {
+        let test_data: [[u8; 2]; 1] = [[0x75, 0x02]];
+        assert_eq!(parse_instruction(&test_data[0]),
+                   (2, String::from("jnz #OFFSET# 2")))
 
+    }
 }
