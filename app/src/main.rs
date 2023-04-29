@@ -585,6 +585,49 @@ mod test {
     }
 
     #[test]
+    fn test_decode_with_labels() {
+        let test_data: [u8; 46] = [
+            0x75, 0xfc, 0x75, 0xfa, 0x75, 0xfc, 0x74, 0xfe,
+            0x7c, 0xfc, 0x7e, 0xfa, 0x72, 0xf8, 0x76, 0xf6,
+            0x7a, 0xf4, 0x70, 0xf2, 0x78, 0xf0, 0x75, 0xee,
+            0x7d, 0xec, 0x7f, 0xea, 0x73, 0xe8, 0x77, 0xe6,
+            0x7b, 0xe4, 0x71, 0xe2, 0x79, 0xe0, 0xe2, 0xde,
+            0xe1, 0xdc, 0xe0, 0xda, 0xe3, 0xd8];
+
+        let expected =
+            "bits 16\n\n\
+             label_0:\n\
+             jnz test_label\n\
+             jnz test_label\n\
+             label_1:\n\
+             jnz test_label\n\
+             jnz test_label\n\
+             label_2:\n\
+             je label_2\n\
+             jl label_2\n\
+             jle label_2\n\
+             jb label_2\n\
+             jbe label_2\n\
+             jp label_2\n\
+             jo label_2\n\
+             js label_2\n\
+             jne label_2\n\
+             jnl label_2\n\
+             jg label_2\n\
+             jnb label_2\n\
+             ja label_2\n\
+             jnp label_2\n\
+             jno label_2\n\
+             s label_2\n\
+             loop label_2\n\
+             loopz label_2\n\
+             loopnz label_2\n\
+             jcxz label_2\n";
+
+        assert_eq!(decode_from_data(&test_data), expected);
+    }
+
+    #[test]
     fn test_parse_8bit_imm_mov() {
         {
             let test_data: [u8; 2] = [0xb1, 0x0c];
