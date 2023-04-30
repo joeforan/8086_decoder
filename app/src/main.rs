@@ -1339,4 +1339,14 @@ mod test {
                    (2, String::from("xchg cl, ah")));
     }
 
+    #[test]
+    fn test_in_instructions() {
+        assert_eq!(parse_instruction(&[0xe4, 0xc8]),
+                   (2, String::from("in al, 200")));
+        assert_eq!(parse_instruction(&[0xec]),
+                   (1, String::from("in al, dx")));
+        assert_eq!(parse_instruction(&[0xed]),
+                   (1, String::from("in ax, dx")));
+    }
+
 }
