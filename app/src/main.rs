@@ -14,6 +14,7 @@ enum OpcodeType
     Jump,
     PushPop,
     Xchg,
+    InOut
 }
 
 #[derive(PartialEq, Clone, Copy)]
@@ -59,7 +60,9 @@ enum Opcode {
     PopReg,
     PopSr,
     XchgReg,
-    XchgAcc
+    XchgAcc,
+    InData,
+    InReg
 }
 
 #[derive(PartialEq, Clone, Copy)]
@@ -88,7 +91,7 @@ enum ThreeBitValue{
     TBV111 = 0b111
 }
 
-const NO_OPCODES: usize = 42;
+const NO_OPCODES: usize = 44;
 
 const D_MASK: u8 = 0x02;
 const D_SHFT: u8 = 1;
@@ -166,7 +169,10 @@ fn get_opcode_mnemonic(opcode: Opcode) -> String
             PopSr => "pop",
 
             XchgReg |
-            XchgAcc => "xchg"
+            XchgAcc => "xchg",
+
+            InData |
+            InReg => "in"
         }
     )
 }
@@ -221,7 +227,10 @@ fn get_opcode_type(opcode: Opcode) -> OpcodeType {
         PopSr => OpcodeType::PushPop,
 
         XchgReg |
-        XchgAcc => OpcodeType::Xchg
+        XchgAcc => OpcodeType::Xchg,
+
+        InData |
+        InReg   => OpcodeType::InOut,
     }
 }
 
@@ -269,7 +278,9 @@ fn get_opcode(data: &[u8]) -> Opcode {
         (0x58, 0xF8, 0x00, 0x00, PopReg),
         (0x03, 0xE3, 0x00, 0x00, PopSr),
         (0x86, 0xFE, 0x00, 0x00, XchgReg),
-        (0x90, 0xF8, 0x00, 0x00, XchgAcc)
+        (0x90, 0xF8, 0x00, 0x00, XchgAcc),
+        (0xE4, 0xFE, 0x00, 0x00, InData),
+        (0xEC, 0xFE, 0x00, 0x00, InReg),
     ];
 
     for t in LUT.iter() {
@@ -606,6 +617,25 @@ fn parse_xchg_instruction(opcode: Opcode, data: &[u8]) -> (usize, String) {
     }
 }
 
+fn parse_inout_instruction(opcode: Opcode, data: &[u8]) -> (usize, String) {
+    use Opcode::*;
+    use BitValue::*;
+    let oc_mnmc = get_opcode_mnemonic(opcode);
+    let w_flag = get_bit_value((data[0] & W_MASK) >> W_SHFT);
+    let dst_reg = match w_flag { BV0 => "al", BV1 => "ax" };
+    match opcode {
+        InData => {
+            (2, String::from(format!("{} {}, {}",
+                                     oc_mnmc, dst_reg, data[1])))
+        },
+        InReg => {
+            (1, String::from(format!("{} {}, dx",
+                                     oc_mnmc, dst_reg)))
+        },
+        _ => unreachable!()
+    }
+}
+
 fn parse_instruction(data: &[u8]) -> (usize, String)
 {
     let opcode = get_opcode(data);
@@ -617,6 +647,7 @@ fn parse_instruction(data: &[u8]) -> (usize, String)
         OpcodeType::Jump => parse_jmp_instruction(opcode, data),
         OpcodeType::PushPop  => parse_pushpop_instruction(opcode, data),
         OpcodeType::Xchg => parse_xchg_instruction(opcode, data),
+        OpcodeType::InOut => parse_inout_instruction(opcode, data),
     }
 }
 
