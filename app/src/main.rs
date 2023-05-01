@@ -1380,4 +1380,13 @@ mod test {
                    (1, String::from("in ax, dx")));
     }
 
+    #[test]
+    fn test_out_instructions() {
+        assert_eq!(parse_instruction(&[0xe7, 0x2c]),
+                   (2, String::from("out 44, ax")));
+        assert_eq!(parse_instruction(&[0xee]),
+                   (1, String::from("out dx, al")));
+        assert_eq!(parse_instruction(&[0xef]),
+                   (1, String::from("out dx, ax")));
+    }
 }
