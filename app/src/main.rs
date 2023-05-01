@@ -1404,4 +1404,10 @@ mod test {
         assert_eq!(parse_instruction(&[0xef]),
                    (1, String::from("out dx, ax")));
     }
+
+    #[test]
+    fn test_xlat_instruction() {
+        assert_eq!(parse_instruction(&[0xd7]),
+                   (1, String::from("xlat")));
+    }
 }
