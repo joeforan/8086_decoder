@@ -62,7 +62,9 @@ enum Opcode {
     XchgReg,
     XchgAcc,
     InData,
-    InReg
+    InReg,
+    OutData,
+    OutReg
 }
 
 #[derive(PartialEq, Clone, Copy)]
@@ -91,7 +93,7 @@ enum ThreeBitValue{
     TBV111 = 0b111
 }
 
-const NO_OPCODES: usize = 44;
+const NO_OPCODES: usize = 46;
 
 const D_MASK: u8 = 0x02;
 const D_SHFT: u8 = 1;
@@ -172,7 +174,11 @@ fn get_opcode_mnemonic(opcode: Opcode) -> String
             XchgAcc => "xchg",
 
             InData |
-            InReg => "in"
+            InReg => "in",
+
+            OutData |
+            OutReg => "out"
+
         }
     )
 }
@@ -230,7 +236,9 @@ fn get_opcode_type(opcode: Opcode) -> OpcodeType {
         XchgAcc => OpcodeType::Xchg,
 
         InData |
-        InReg   => OpcodeType::InOut,
+        InReg  |
+        OutData |
+        OutReg => OpcodeType::InOut,
     }
 }
 
@@ -281,6 +289,8 @@ fn get_opcode(data: &[u8]) -> Opcode {
         (0x90, 0xF8, 0x00, 0x00, XchgAcc),
         (0xE4, 0xFE, 0x00, 0x00, InData),
         (0xEC, 0xFE, 0x00, 0x00, InReg),
+        (0xE6, 0xFE, 0x00, 0x00, OutData),
+        (0xEE, 0xFE, 0x00, 0x00, OutReg),
     ];
 
     for t in LUT.iter() {
@@ -620,18 +630,23 @@ fn parse_xchg_instruction(opcode: Opcode, data: &[u8]) -> (usize, String) {
 fn parse_inout_instruction(opcode: Opcode, data: &[u8]) -> (usize, String) {
     use Opcode::*;
     use BitValue::*;
-    let oc_mnmc = get_opcode_mnemonic(opcode);
     let w_flag = get_bit_value((data[0] & W_MASK) >> W_SHFT);
-    let dst_reg = match w_flag { BV0 => "al", BV1 => "ax" };
+    let reg_mnmc = match w_flag { BV0 => "al", BV1 => "ax" };
     match opcode {
         InData => {
-            (2, String::from(format!("{} {}, {}",
-                                     oc_mnmc, dst_reg, data[1])))
+            (2, String::from(format!("in {}, {}",
+                                     reg_mnmc, data[1])))
         },
         InReg => {
-            (1, String::from(format!("{} {}, dx",
-                                     oc_mnmc, dst_reg)))
+            (1, String::from(format!("in {}, dx",
+                                     reg_mnmc)))
         },
+        OutData => {
+            (2, String::from(format!("out {}, {}", data[1], reg_mnmc)))
+        },
+        OutReg => {
+            (1, String::from(format!("out dx, {}", reg_mnmc)))
+        }
         _ => unreachable!()
     }
 }
