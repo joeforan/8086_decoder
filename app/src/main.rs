@@ -14,7 +14,8 @@ enum OpcodeType
     Jump,
     PushPop,
     Xchg,
-    InOut
+    InOut,
+    Misc
 }
 
 #[derive(PartialEq, Clone, Copy)]
@@ -64,7 +65,8 @@ enum Opcode {
     InData,
     InReg,
     OutData,
-    OutReg
+    OutReg,
+    Xlat,
 }
 
 #[derive(PartialEq, Clone, Copy)]
@@ -93,7 +95,7 @@ enum ThreeBitValue{
     TBV111 = 0b111
 }
 
-const NO_OPCODES: usize = 46;
+const NO_OPCODES: usize = 47;
 
 const D_MASK: u8 = 0x02;
 const D_SHFT: u8 = 1;
@@ -177,8 +179,9 @@ fn get_opcode_mnemonic(opcode: Opcode) -> String
             InReg => "in",
 
             OutData |
-            OutReg => "out"
+            OutReg => "out",
 
+            Xlat => "xlat"
         }
     )
 }
@@ -239,6 +242,8 @@ fn get_opcode_type(opcode: Opcode) -> OpcodeType {
         InReg  |
         OutData |
         OutReg => OpcodeType::InOut,
+
+        Xlat => OpcodeType::Misc,
     }
 }
 
@@ -291,6 +296,7 @@ fn get_opcode(data: &[u8]) -> Opcode {
         (0xEC, 0xFE, 0x00, 0x00, InReg),
         (0xE6, 0xFE, 0x00, 0x00, OutData),
         (0xEE, 0xFE, 0x00, 0x00, OutReg),
+        (0xD7, 0xFF, 0x00, 0x00, Xlat)
     ];
 
     for t in LUT.iter() {
@@ -651,6 +657,14 @@ fn parse_inout_instruction(opcode: Opcode, data: &[u8]) -> (usize, String) {
     }
 }
 
+fn parse_misc_instruction(opcode: Opcode, _data: &[u8]) -> (usize, String) {
+    use Opcode::*;
+    match opcode {
+        Xlat => (1, String::from("xlat")),
+        _ => unreachable!()
+    }
+}
+
 fn parse_instruction(data: &[u8]) -> (usize, String)
 {
     let opcode = get_opcode(data);
@@ -663,6 +677,7 @@ fn parse_instruction(data: &[u8]) -> (usize, String)
         OpcodeType::PushPop  => parse_pushpop_instruction(opcode, data),
         OpcodeType::Xchg => parse_xchg_instruction(opcode, data),
         OpcodeType::InOut => parse_inout_instruction(opcode, data),
+        OpcodeType::Misc => parse_misc_instruction(opcode, data)
     }
 }
 
