@@ -1411,4 +1411,18 @@ mod test {
         assert_eq!(parse_instruction(&[0xd7]),
                    (1, String::from("xlat")));
     }
+
+    #[test]
+    fn test_lea_instruction() {
+        assert_eq!(parse_instruction(&[0x8d, 0x81, 0x8c, 0x05]),
+                   (4, String::from("lea ax, [bx + bi + 1420]")));
+        assert_eq!(parse_instruction(&[0x8d, 0x5e, 0xce]),
+                   (3, String::from("lea bx, [bp - 50]")));
+        assert_eq!(parse_instruction(&[0x8d, 0xa6, 0x15, 0xfc]),
+                   (4, String::from("lea sp, [bp - 1003]")));
+        assert_eq!(parse_instruction(&[0x8d, 0x78, 0xf9]),
+                   (3, String::from("lea di, [bx + si - 7]")));
+
+
+    }
 }
