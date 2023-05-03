@@ -37,10 +37,10 @@ enum OpcodeParseType
     RegMov,
     Rm,
     Acc,
-    Standard,
+    RegRmWithDisp,
     Jump,
     PushPop,
-    Xchg,
+    SingleByteWithReg,
     InOut,
     Misc,
     Nop
@@ -78,10 +78,10 @@ struct OpcodeTableEntry {
 
 const OPCODE_TABLE: [OpcodeTableEntry; 256] =
     [
-        OpcodeTableEntry { mnemonic: "add", opt: OpcodeParseType::Standard}, //0x00
-        OpcodeTableEntry { mnemonic: "add", opt: OpcodeParseType::Standard}, //0x01
-        OpcodeTableEntry { mnemonic: "add", opt: OpcodeParseType::Standard}, //0x02
-        OpcodeTableEntry { mnemonic: "add", opt: OpcodeParseType::Standard}, //0x03
+        OpcodeTableEntry { mnemonic: "add", opt: OpcodeParseType::RegRmWithDisp}, //0x00
+        OpcodeTableEntry { mnemonic: "add", opt: OpcodeParseType::RegRmWithDisp}, //0x01
+        OpcodeTableEntry { mnemonic: "add", opt: OpcodeParseType::RegRmWithDisp}, //0x02
+        OpcodeTableEntry { mnemonic: "add", opt: OpcodeParseType::RegRmWithDisp}, //0x03
         OpcodeTableEntry { mnemonic: "add", opt: OpcodeParseType::Acc}, //0x04
         OpcodeTableEntry { mnemonic: "add", opt: OpcodeParseType::Acc}, //0x05
         OpcodeTableEntry { mnemonic: "push", opt: OpcodeParseType::PushPop}, //0x06
@@ -118,10 +118,10 @@ const OPCODE_TABLE: [OpcodeTableEntry; 256] =
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x25
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x26
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x27
-        OpcodeTableEntry { mnemonic: "sub", opt: OpcodeParseType::Standard}, //0x28
-        OpcodeTableEntry { mnemonic: "sub", opt: OpcodeParseType::Standard}, //0x29
-        OpcodeTableEntry { mnemonic: "sub", opt: OpcodeParseType::Standard}, //0x2A
-        OpcodeTableEntry { mnemonic: "sub", opt: OpcodeParseType::Standard}, //0x2B
+        OpcodeTableEntry { mnemonic: "sub", opt: OpcodeParseType::RegRmWithDisp}, //0x28
+        OpcodeTableEntry { mnemonic: "sub", opt: OpcodeParseType::RegRmWithDisp}, //0x29
+        OpcodeTableEntry { mnemonic: "sub", opt: OpcodeParseType::RegRmWithDisp}, //0x2A
+        OpcodeTableEntry { mnemonic: "sub", opt: OpcodeParseType::RegRmWithDisp}, //0x2B
         OpcodeTableEntry { mnemonic: "sub", opt: OpcodeParseType::Acc}, //0x2C
         OpcodeTableEntry { mnemonic: "sub", opt: OpcodeParseType::Acc}, //0x2D
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x2E
@@ -134,10 +134,10 @@ const OPCODE_TABLE: [OpcodeTableEntry; 256] =
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x35
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x36
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x37
-        OpcodeTableEntry { mnemonic: "cmp", opt: OpcodeParseType::Standard}, //0x38
-        OpcodeTableEntry { mnemonic: "cmp", opt: OpcodeParseType::Standard}, //0x39
-        OpcodeTableEntry { mnemonic: "cmp", opt: OpcodeParseType::Standard}, //0x3A
-        OpcodeTableEntry { mnemonic: "cmp", opt: OpcodeParseType::Standard}, //0x3B
+        OpcodeTableEntry { mnemonic: "cmp", opt: OpcodeParseType::RegRmWithDisp}, //0x38
+        OpcodeTableEntry { mnemonic: "cmp", opt: OpcodeParseType::RegRmWithDisp}, //0x39
+        OpcodeTableEntry { mnemonic: "cmp", opt: OpcodeParseType::RegRmWithDisp}, //0x3A
+        OpcodeTableEntry { mnemonic: "cmp", opt: OpcodeParseType::RegRmWithDisp}, //0x3B
         OpcodeTableEntry { mnemonic: "cmp", opt: OpcodeParseType::Acc}, //0x3C
         OpcodeTableEntry { mnemonic: "cmp", opt: OpcodeParseType::Acc}, //0x3D
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x3E
@@ -212,24 +212,24 @@ const OPCODE_TABLE: [OpcodeTableEntry; 256] =
         OpcodeTableEntry { mnemonic: "---", opt: OpcodeParseType::Rm}, //0x83
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x84
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x85
-        OpcodeTableEntry { mnemonic: "xchg", opt: OpcodeParseType::Xchg}, //0x86
-        OpcodeTableEntry { mnemonic: "xchg", opt: OpcodeParseType::Xchg}, //0x87
-        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::Standard}, //0x88
-        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::Standard}, //0x89
-        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::Standard}, //0x8A
-        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::Standard}, //0x8B
+        OpcodeTableEntry { mnemonic: "xchg", opt: OpcodeParseType::RegRmWithDisp}, //0x86
+        OpcodeTableEntry { mnemonic: "xchg", opt: OpcodeParseType::RegRmWithDisp}, //0x87
+        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::RegRmWithDisp}, //0x88
+        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::RegRmWithDisp}, //0x89
+        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::RegRmWithDisp}, //0x8A
+        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::RegRmWithDisp}, //0x8B
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x8C
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x8D
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x8E
         OpcodeTableEntry { mnemonic: "pop", opt: OpcodeParseType::PushPop}, //0x8F
-        OpcodeTableEntry { mnemonic: "xchg", opt: OpcodeParseType::Xchg}, //0x90
-        OpcodeTableEntry { mnemonic: "xchg", opt: OpcodeParseType::Xchg}, //0x91
-        OpcodeTableEntry { mnemonic: "xchg", opt: OpcodeParseType::Xchg}, //0x92
-        OpcodeTableEntry { mnemonic: "xchg", opt: OpcodeParseType::Xchg}, //0x93
-        OpcodeTableEntry { mnemonic: "xchg", opt: OpcodeParseType::Xchg}, //0x94
-        OpcodeTableEntry { mnemonic: "xchg", opt: OpcodeParseType::Xchg}, //0x95
-        OpcodeTableEntry { mnemonic: "xchg", opt: OpcodeParseType::Xchg}, //0x96
-        OpcodeTableEntry { mnemonic: "xchg", opt: OpcodeParseType::Xchg}, //0x97
+        OpcodeTableEntry { mnemonic: "xchg", opt: OpcodeParseType::SingleByteWithReg}, //0x90
+        OpcodeTableEntry { mnemonic: "xchg", opt: OpcodeParseType::SingleByteWithReg}, //0x91
+        OpcodeTableEntry { mnemonic: "xchg", opt: OpcodeParseType::SingleByteWithReg}, //0x92
+        OpcodeTableEntry { mnemonic: "xchg", opt: OpcodeParseType::SingleByteWithReg}, //0x93
+        OpcodeTableEntry { mnemonic: "xchg", opt: OpcodeParseType::SingleByteWithReg}, //0x94
+        OpcodeTableEntry { mnemonic: "xchg", opt: OpcodeParseType::SingleByteWithReg}, //0x95
+        OpcodeTableEntry { mnemonic: "xchg", opt: OpcodeParseType::SingleByteWithReg}, //0x96
+        OpcodeTableEntry { mnemonic: "xchg", opt: OpcodeParseType::SingleByteWithReg}, //0x97
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x98
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x99
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x9A
@@ -597,7 +597,7 @@ fn get_reg_and_rm_strings(data: &[u8],
     (offset, String::from(format!("{}, {}", left, right)))
 }
 
-fn parse_std_instruction(opcode: OpcodeTableEntry, data: &[u8]) -> (usize, String) {
+fn parse_reg_rm_with_disp_instruction(opcode: OpcodeTableEntry, data: &[u8]) -> (usize, String) {
     let oc_mnmnc = opcode.mnemonic;
     let w_flag = get_bit_value((data[0] & W_MASK) >> W_SHFT);
     let reg_code = get_three_bit_value((data[1] & REG_MASK) >> REG_SHFT);
@@ -642,28 +642,11 @@ fn parse_pushpop_instruction(opcode: OpcodeTableEntry, data: &[u8]) -> (usize, S
     }
 }
 
-fn parse_xchg_instruction(opcode: OpcodeTableEntry, data: &[u8]) -> (usize, String) {
+fn parse_single_byte_instruction_with_reg(opcode: OpcodeTableEntry, data: &[u8]) -> (usize, String) {
     use BitValue::*;
     let oc_mnmc = opcode.mnemonic;
-    if (data[0] & 0xFE) == 0x86 {
-        let w_flag = get_bit_value((data[0] & W_MASK) >> W_SHFT);
-        let reg_code = get_three_bit_value((data[1] & REG_MASK) >> REG_SHFT);
-        let mod_code = get_two_bit_value((data[1] & MOD_MASK) >> MOD_SHFT);
-        let rm_code = get_three_bit_value((data[1] & RM_MASK) >> RM_SHFT);
-
-        let (offset, operand_str) = get_reg_and_rm_strings(data,
-                                                           w_flag,
-                                                           mod_code,
-                                                           reg_code,
-                                                           rm_code,
-                                                           BV1);
-        (offset, String::from(format!("{} {}", oc_mnmc, operand_str)))
-    } else if (data[0] & 0xF8) == 0x90 {
-        let reg_string = get_reg_str(BV1, get_three_bit_value(data[0] & 0x7));
-        (1, String::from(format!("{} ax, {}", oc_mnmc, reg_string)))
-    } else {
-        unreachable!()
-    }
+    let reg_string = get_reg_str(BV1, get_three_bit_value(data[0] & 0x7));
+    (1, String::from(format!("{} ax, {}", oc_mnmc, reg_string)))
 }
 
 fn parse_inout_instruction(_opcode: OpcodeTableEntry, data: &[u8]) -> (usize, String) {
@@ -703,10 +686,10 @@ fn parse_instruction(data: &[u8]) -> (usize, String)
         OpcodeParseType::RegMov => parse_reg_mov(opcode, data),
         OpcodeParseType::Rm => parse_rm_instruction(opcode, data),
         OpcodeParseType::Acc =>  parse_acc_instruction(opcode, data),
-        OpcodeParseType::Standard => parse_std_instruction(opcode, data),
+        OpcodeParseType::RegRmWithDisp => parse_reg_rm_with_disp_instruction(opcode, data),
         OpcodeParseType::Jump => parse_jmp_instruction(opcode, data),
         OpcodeParseType::PushPop  => parse_pushpop_instruction(opcode, data),
-        OpcodeParseType::Xchg => parse_xchg_instruction(opcode, data),
+        OpcodeParseType::SingleByteWithReg => parse_single_byte_instruction_with_reg(opcode, data),
         OpcodeParseType::InOut => parse_inout_instruction(opcode, data),
         OpcodeParseType::Misc => parse_misc_instruction(opcode, data),
         OpcodeParseType::Nop => panic!("Invalid opcode 0x{:x}",data[0])
