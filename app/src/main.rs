@@ -278,7 +278,7 @@ const OPCODE_TABLE: [OpcodeTableEntry; 256] =
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xC2
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xC3
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xC4
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xC5
+        OpcodeTableEntry { mnemonic: "lds", opt: OpcodeParseType::RegRmWithDispD1}, //0xC5
         OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::ImmRm}, //0xC6
         OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::ImmRm}, //0xC7
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xC8
@@ -1434,7 +1434,17 @@ mod test {
                    (4, String::from("lea sp, [bp - 1003]")));
         assert_eq!(parse_instruction(&[0x8d, 0x78, 0xf9]),
                    (3, String::from("lea di, [bx + si - 7]")));
+    }
 
-
+    #[test]
+    fn test_lds_instruction() {
+        assert_eq!(parse_instruction(&[0xc5, 0x81, 0x8c, 0x05]),
+                   (4, String::from("lds ax, [bx + di + 1420]")));
+        assert_eq!(parse_instruction(&[0xc5, 0x5e, 0xce]),
+                   (3, String::from("lds bx, [bp - 50]")));
+        assert_eq!(parse_instruction(&[0xc5, 0xa6, 0x15, 0xfc]),
+                   (4, String::from("lds sp, [bp - 1003]")));
+        assert_eq!(parse_instruction(&[0xc5, 0x78, 0xf9]),
+                   (3, String::from("lds di, [bx + si - 7]")));
     }
 }
