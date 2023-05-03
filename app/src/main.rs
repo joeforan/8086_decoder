@@ -316,10 +316,10 @@ const OPCODE_TABLE: [OpcodeTableEntry; 256] =
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xE9
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xEA
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xEB
-        OpcodeTableEntry { mnemonic: "in", opt: OpcodeParseType::InOut}, //0xEC
-        OpcodeTableEntry { mnemonic: "in", opt: OpcodeParseType::InOut}, //0xED
-        OpcodeTableEntry { mnemonic: "out", opt: OpcodeParseType::InOut}, //0xEE
-        OpcodeTableEntry { mnemonic: "out", opt: OpcodeParseType::InOut}, //0xEF
+        OpcodeTableEntry { mnemonic: "in al, dx", opt: OpcodeParseType::Direct}, //0xEC
+        OpcodeTableEntry { mnemonic: "in ax, dx", opt: OpcodeParseType::Direct}, //0xED
+        OpcodeTableEntry { mnemonic: "out dx, al", opt: OpcodeParseType::Direct}, //0xEE
+        OpcodeTableEntry { mnemonic: "out dx, ax", opt: OpcodeParseType::Direct}, //0xEF
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xF0
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xF1
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xF2
@@ -651,26 +651,14 @@ fn parse_single_byte_instruction_with_reg(opcode: OpcodeTableEntry, data: &[u8])
     (1, String::from(format!("{} {}", oc_mnmc, reg_string)))
 }
 
-fn parse_inout_instruction(_opcode: OpcodeTableEntry, data: &[u8]) -> (usize, String) {
+fn parse_inout_instruction(opcode: OpcodeTableEntry, data: &[u8]) -> (usize, String) {
     use BitValue::*;
     let w_flag = get_bit_value((data[0] & W_MASK) >> W_SHFT);
     let reg_mnmc = match w_flag { BV0 => "al", BV1 => "ax" };
-    match data[0] {
-        0xE4 | 0xE5 => {
-            (2, String::from(format!("in {}, {}",
-                                     reg_mnmc, data[1])))
-        },
-        0xEC | 0xED => {
-            (1, String::from(format!("in {}, dx",
-                                     reg_mnmc)))
-        },
-        0xE6 | 0xE7 => {
-            (2, String::from(format!("out {}, {}", data[1], reg_mnmc)))
-        },
-        0xEE | 0xEF => {
-            (1, String::from(format!("out dx, {}", reg_mnmc)))
-        }
-        _ => unreachable!()
+    if opcode.mnemonic == "in" {
+        (2, String::from(format!("in {}, {}", reg_mnmc, data[1])))
+    } else {
+        (2, String::from(format!("out {}, {}", data[1], reg_mnmc)))
     }
 }
 
