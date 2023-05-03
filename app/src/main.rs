@@ -34,8 +34,8 @@ enum ThreeBitValue{
 #[derive (Clone, Copy)]
 enum OpcodeParseType
 {
-    RegMov,
-    Rm,
+    ImmReg,
+    ImmRm,
     Acc,
     RegRmWithDisp,
     Jump,
@@ -206,10 +206,10 @@ const OPCODE_TABLE: [OpcodeTableEntry; 256] =
         OpcodeTableEntry { mnemonic: "jnl", opt: OpcodeParseType::Jump}, //0x7D
         OpcodeTableEntry { mnemonic: "jle", opt: OpcodeParseType::Jump}, //0x7E
         OpcodeTableEntry { mnemonic: "jg", opt: OpcodeParseType::Jump}, //0x7F
-        OpcodeTableEntry { mnemonic: "---", opt: OpcodeParseType::Rm}, //0x80
-        OpcodeTableEntry { mnemonic: "---", opt: OpcodeParseType::Rm}, //0x81
-        OpcodeTableEntry { mnemonic: "---", opt: OpcodeParseType::Rm}, //0x82
-        OpcodeTableEntry { mnemonic: "---", opt: OpcodeParseType::Rm}, //0x83
+        OpcodeTableEntry { mnemonic: "---", opt: OpcodeParseType::ImmRm}, //0x80
+        OpcodeTableEntry { mnemonic: "---", opt: OpcodeParseType::ImmRm}, //0x81
+        OpcodeTableEntry { mnemonic: "---", opt: OpcodeParseType::ImmRm}, //0x82
+        OpcodeTableEntry { mnemonic: "---", opt: OpcodeParseType::ImmRm}, //0x83
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x84
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x85
         OpcodeTableEntry { mnemonic: "xchg", opt: OpcodeParseType::RegRmWithDisp}, //0x86
@@ -254,30 +254,30 @@ const OPCODE_TABLE: [OpcodeTableEntry; 256] =
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xAD
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xAE
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xAF
-        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::RegMov}, //0xB0
-        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::RegMov}, //0xB1
-        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::RegMov}, //0xB2
-        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::RegMov}, //0xB3
-        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::RegMov}, //0xB4
-        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::RegMov}, //0xB5
-        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::RegMov}, //0xB6
-        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::RegMov}, //0xB7
-        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::RegMov}, //0xB8
-        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::RegMov}, //0xB9
-        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::RegMov}, //0xBA
-        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::RegMov}, //0xBB
-        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::RegMov}, //0xBC
-        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::RegMov}, //0xBD
-        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::RegMov}, //0xBE
-        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::RegMov}, //0xBF
+        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::ImmReg}, //0xB0
+        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::ImmReg}, //0xB1
+        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::ImmReg}, //0xB2
+        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::ImmReg}, //0xB3
+        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::ImmReg}, //0xB4
+        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::ImmReg}, //0xB5
+        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::ImmReg}, //0xB6
+        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::ImmReg}, //0xB7
+        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::ImmReg}, //0xB8
+        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::ImmReg}, //0xB9
+        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::ImmReg}, //0xBA
+        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::ImmReg}, //0xBB
+        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::ImmReg}, //0xBC
+        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::ImmReg}, //0xBD
+        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::ImmReg}, //0xBE
+        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::ImmReg}, //0xBF
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xC0
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xC1
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xC2
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xC3
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xC4
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xC5
-        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::Rm}, //0xC6
-        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::Rm}, //0xC7
+        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::ImmRm}, //0xC6
+        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::ImmRm}, //0xC7
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xC8
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xC9
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xCA
@@ -479,7 +479,7 @@ fn get_mem_ptr_and_displacement(data: &[u8],
     }
 }
 
-fn parse_reg_mov(opcode: OpcodeTableEntry, data: &[u8]) -> (usize, String) {
+fn parse_imm_reg_instruction(opcode: OpcodeTableEntry, data: &[u8]) -> (usize, String) {
     let oc_mnmnc = opcode.mnemonic;
     let immw_flag = get_bit_value((data[0] & IMMW_MASK) >> IMMW_SHFT);
     let immreg_code = get_three_bit_value((data[0] & IMMREG_MASK) >> IMMREG_SHFT);
@@ -494,7 +494,7 @@ fn parse_reg_mov(opcode: OpcodeTableEntry, data: &[u8]) -> (usize, String) {
     }
 }
 
-fn parse_rm_instruction(opcode: OpcodeTableEntry, data: &[u8]) -> (usize, String) {
+fn parse_imm_rm_instruction(opcode: OpcodeTableEntry, data: &[u8]) -> (usize, String) {
     use TwoBitValue::*;
     use ThreeBitValue::*;
     let oc_mnmnc = if (data[0] & 0xFC) == 0x80 {
@@ -683,8 +683,8 @@ fn parse_instruction(data: &[u8]) -> (usize, String)
 {
     let opcode = get_opcode_info(data[0]);
     match opcode.opt {
-        OpcodeParseType::RegMov => parse_reg_mov(opcode, data),
-        OpcodeParseType::Rm => parse_rm_instruction(opcode, data),
+        OpcodeParseType::ImmReg => parse_imm_reg_instruction(opcode, data),
+        OpcodeParseType::ImmRm => parse_imm_rm_instruction(opcode, data),
         OpcodeParseType::Acc =>  parse_acc_instruction(opcode, data),
         OpcodeParseType::RegRmWithDisp => parse_reg_rm_with_disp_instruction(opcode, data),
         OpcodeParseType::Jump => parse_jmp_instruction(opcode, data),
