@@ -238,10 +238,10 @@ const OPCODE_TABLE: [OpcodeTableEntry; 256] =
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x99
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x9A
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x9B
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x9C
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x9D
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x9E
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x9F
+        OpcodeTableEntry { mnemonic: "pushf", opt: OpcodeParseType::Direct}, //0x9C
+        OpcodeTableEntry { mnemonic: "popf", opt: OpcodeParseType::Direct}, //0x9D
+        OpcodeTableEntry { mnemonic: "sahf", opt: OpcodeParseType::Direct}, //0x9E
+        OpcodeTableEntry { mnemonic: "lahf", opt: OpcodeParseType::Direct}, //0x9F
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xA0
         OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::AccMem}, //0xA1
         OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::AccMem}, //0xA2
@@ -1428,9 +1428,17 @@ mod test {
     }
 
     #[test]
-    fn test_xlat_instruction() {
+    fn test_direct_instructions() {
         assert_eq!(parse_instruction(&[0xd7]),
                    (1, String::from("xlat")));
+        assert_eq!(parse_instruction(&[0x9f]),
+                   (1, String::from("lahf")));
+        assert_eq!(parse_instruction(&[0x9e]),
+                   (1, String::from("sahf")));
+        assert_eq!(parse_instruction(&[0x9c]),
+                   (1, String::from("pushf")));
+        assert_eq!(parse_instruction(&[0x9d]),
+                   (1, String::from("popf")));
     }
 
     #[test]
