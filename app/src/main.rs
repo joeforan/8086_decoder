@@ -577,19 +577,18 @@ fn parse_imm_acc_instruction(opcode: OpcodeTableEntry, data: &[u8]) -> (usize, S
     }
 }
 
-fn get_reg_and_rm_strings(data: &[u8],
-                          w_flag: BitValue,
-                          mod_code: TwoBitValue,
-                          reg_code: ThreeBitValue,
-                          rm_code: ThreeBitValue,
-                          d_flag: BitValue) -> (usize, String) {
-
+fn parse_reg_rm_with_disp_instruction(opcode: OpcodeTableEntry, data: &[u8]) -> (usize, String) {
     use BitValue::*;
     use TwoBitValue::*;
-
+    let oc_mnmnc = opcode.mnemonic;
+    let w_flag = get_bit_value((data[0] & W_MASK) >> W_SHFT);
+    let reg_code = get_three_bit_value((data[1] & REG_MASK) >> REG_SHFT);
     let reg_string = get_reg_str(w_flag, reg_code);
-    let mut offset: usize = 2;
 
+    let mod_code = get_two_bit_value((data[1] & MOD_MASK) >> MOD_SHFT);
+    let rm_code = get_three_bit_value((data[1] & RM_MASK) >> RM_SHFT);
+    let d_flag = get_bit_value((data[0] & D_MASK) >> D_SHFT);
+    let mut offset: usize = 2;
     let rm_string = match mod_code {
         DBV11 => get_reg_str(w_flag, rm_code),
         _ => {
@@ -598,31 +597,14 @@ fn get_reg_and_rm_strings(data: &[u8],
             t.1
         }
     };
+
     let (left, right) = if d_flag == BV0 {
         (rm_string, reg_string)
     } else {
         (reg_string, rm_string)
     };
 
-    (offset, String::from(format!("{}, {}", left, right)))
-}
-
-fn parse_reg_rm_with_disp_instruction(opcode: OpcodeTableEntry, data: &[u8]) -> (usize, String) {
-    let oc_mnmnc = opcode.mnemonic;
-    let w_flag = get_bit_value((data[0] & W_MASK) >> W_SHFT);
-    let reg_code = get_three_bit_value((data[1] & REG_MASK) >> REG_SHFT);
-    let mod_code = get_two_bit_value((data[1] & MOD_MASK) >> MOD_SHFT);
-    let rm_code = get_three_bit_value((data[1] & RM_MASK) >> RM_SHFT);
-    let d_flag = get_bit_value((data[0] & D_MASK) >> D_SHFT);
-
-    let (offset, reg_str) = get_reg_and_rm_strings(data,
-                                                   w_flag,
-                                                   mod_code,
-                                                   reg_code,
-                                                   rm_code,
-                                                   d_flag);
-
-    (offset, String::from(format!("{} {}", oc_mnmnc, reg_str)))
+    (offset, String::from(format!("{} {}, {}", oc_mnmnc, left, right)))
 }
 
 fn parse_jmp_instruction(opcode: OpcodeTableEntry, data: &[u8]) -> (usize, String) {
