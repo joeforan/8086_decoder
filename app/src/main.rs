@@ -34,10 +34,11 @@ enum ThreeBitValue{
 #[derive (Clone, Copy)]
 enum OpcodeParseType
 {
+    RegRmWithDisp,
     ImmReg,
     ImmRm,
-    Acc,
-    RegRmWithDisp,
+    AccMem,
+    ImmAcc,
     Jump,
     PushPop,
     SingleByteWithReg,
@@ -82,8 +83,8 @@ const OPCODE_TABLE: [OpcodeTableEntry; 256] =
         OpcodeTableEntry { mnemonic: "add", opt: OpcodeParseType::RegRmWithDisp}, //0x01
         OpcodeTableEntry { mnemonic: "add", opt: OpcodeParseType::RegRmWithDisp}, //0x02
         OpcodeTableEntry { mnemonic: "add", opt: OpcodeParseType::RegRmWithDisp}, //0x03
-        OpcodeTableEntry { mnemonic: "add", opt: OpcodeParseType::Acc}, //0x04
-        OpcodeTableEntry { mnemonic: "add", opt: OpcodeParseType::Acc}, //0x05
+        OpcodeTableEntry { mnemonic: "add", opt: OpcodeParseType::ImmAcc}, //0x04
+        OpcodeTableEntry { mnemonic: "add", opt: OpcodeParseType::ImmAcc}, //0x05
         OpcodeTableEntry { mnemonic: "push", opt: OpcodeParseType::PushPop}, //0x06
         OpcodeTableEntry { mnemonic: "pop", opt: OpcodeParseType::PushPop}, //0x07
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x08
@@ -122,8 +123,8 @@ const OPCODE_TABLE: [OpcodeTableEntry; 256] =
         OpcodeTableEntry { mnemonic: "sub", opt: OpcodeParseType::RegRmWithDisp}, //0x29
         OpcodeTableEntry { mnemonic: "sub", opt: OpcodeParseType::RegRmWithDisp}, //0x2A
         OpcodeTableEntry { mnemonic: "sub", opt: OpcodeParseType::RegRmWithDisp}, //0x2B
-        OpcodeTableEntry { mnemonic: "sub", opt: OpcodeParseType::Acc}, //0x2C
-        OpcodeTableEntry { mnemonic: "sub", opt: OpcodeParseType::Acc}, //0x2D
+        OpcodeTableEntry { mnemonic: "sub", opt: OpcodeParseType::ImmAcc}, //0x2C
+        OpcodeTableEntry { mnemonic: "sub", opt: OpcodeParseType::ImmAcc}, //0x2D
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x2E
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x2F
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x30
@@ -138,8 +139,8 @@ const OPCODE_TABLE: [OpcodeTableEntry; 256] =
         OpcodeTableEntry { mnemonic: "cmp", opt: OpcodeParseType::RegRmWithDisp}, //0x39
         OpcodeTableEntry { mnemonic: "cmp", opt: OpcodeParseType::RegRmWithDisp}, //0x3A
         OpcodeTableEntry { mnemonic: "cmp", opt: OpcodeParseType::RegRmWithDisp}, //0x3B
-        OpcodeTableEntry { mnemonic: "cmp", opt: OpcodeParseType::Acc}, //0x3C
-        OpcodeTableEntry { mnemonic: "cmp", opt: OpcodeParseType::Acc}, //0x3D
+        OpcodeTableEntry { mnemonic: "cmp", opt: OpcodeParseType::ImmAcc}, //0x3C
+        OpcodeTableEntry { mnemonic: "cmp", opt: OpcodeParseType::ImmAcc}, //0x3D
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x3E
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x3F
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x40
@@ -239,10 +240,10 @@ const OPCODE_TABLE: [OpcodeTableEntry; 256] =
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x9E
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x9F
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xA0
-        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::Acc}, //0xA1
-        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::Acc}, //0xA2
-        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::Acc}, //0xA3
-        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::Acc}, //0xA4
+        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::AccMem}, //0xA1
+        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::AccMem}, //0xA2
+        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::AccMem}, //0xA3
+        OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::AccMem}, //0xA4
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xA5
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xA6
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xA7
@@ -544,25 +545,33 @@ fn parse_imm_rm_instruction(opcode: OpcodeTableEntry, data: &[u8]) -> (usize, St
     }
 }
 
-fn parse_acc_instruction(opcode: OpcodeTableEntry, data: &[u8]) -> (usize, String) {
+fn parse_acc_mem_instruction(opcode: OpcodeTableEntry, data: &[u8]) -> (usize, String) {
+    use BitValue::*;
+    use ThreeBitValue::*;
+
+    let oc_mnmnc = opcode.mnemonic;
+    let w_flag = get_bit_value((data[0] & W_MASK) >> W_SHFT);
+    let reg_string = get_reg_str(w_flag, TBV000);
+    let val = read_u16_val(&data[1..2+w_flag as usize]);
+    let d_flag = get_bit_value((data[0] & D_MASK) >> D_SHFT);
+    match d_flag {
+        BV0 => (3, String::from(format!("{} {}, [{}]", oc_mnmnc, reg_string, val))),
+        BV1 => (3, String::from(format!("{} [{}], {}", oc_mnmnc, val, reg_string)))
+    }
+}
+
+fn parse_imm_acc_instruction(opcode: OpcodeTableEntry, data: &[u8]) -> (usize, String) {
+    use BitValue::*;
     use ThreeBitValue::*;
 
     let w_flag = get_bit_value((data[0] & W_MASK) >> W_SHFT);
     let reg_string = get_reg_str(w_flag, TBV000);
     let oc_mnmnc = opcode.mnemonic;
-    if (((data[0] & 0xFC) == 0x04) |
-         ((data[0] & 0xFC) == 0x2C) |
-         ((data[0] & 0xFC) == 0x3C)) & (w_flag == BitValue::BV0) {
-        (2, String::from(format!("{} {}, {}", oc_mnmnc,  reg_string, data[1] as i8)))
-    } else {
-        let val = read_u16_val(&data[1..2+w_flag as usize]);
-        match data[0] {
-            0xA0 | 0xA1 => (3, String::from(format!("{} {}, [{}]", oc_mnmnc, reg_string, val))),
-            0xA2 | 0xA3 => (3, String::from(format!("{} [{}], {}", oc_mnmnc, val, reg_string))),
-            0x05 | 0x07 |
-            0x2D | 0x2F |
-            0x3D | 0x3F  => (3, String::from(format!("{} {}, {}", oc_mnmnc,  reg_string, val))),
-            _ => unreachable!()
+    match w_flag {
+        BV0 => (2, String::from(format!("{} {}, {}", oc_mnmnc,  reg_string, data[1] as i8))),
+        BV1 => {
+            let val = read_u16_val(&data[1..2+w_flag as usize]);
+            (3, String::from(format!("{} {}, {}", oc_mnmnc,  reg_string, val)))
         }
     }
 }
@@ -683,10 +692,11 @@ fn parse_instruction(data: &[u8]) -> (usize, String)
 {
     let opcode = get_opcode_info(data[0]);
     match opcode.opt {
+        OpcodeParseType::RegRmWithDisp => parse_reg_rm_with_disp_instruction(opcode, data),
         OpcodeParseType::ImmReg => parse_imm_reg_instruction(opcode, data),
         OpcodeParseType::ImmRm => parse_imm_rm_instruction(opcode, data),
-        OpcodeParseType::Acc =>  parse_acc_instruction(opcode, data),
-        OpcodeParseType::RegRmWithDisp => parse_reg_rm_with_disp_instruction(opcode, data),
+        OpcodeParseType::AccMem =>  parse_acc_mem_instruction(opcode, data),
+        OpcodeParseType::ImmAcc =>  parse_imm_acc_instruction(opcode, data),
         OpcodeParseType::Jump => parse_jmp_instruction(opcode, data),
         OpcodeParseType::PushPop  => parse_pushpop_instruction(opcode, data),
         OpcodeParseType::SingleByteWithReg => parse_single_byte_instruction_with_reg(opcode, data),
