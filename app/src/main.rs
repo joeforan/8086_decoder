@@ -49,6 +49,7 @@ enum OpcodeParseType
     AsciiAdjust,
     Repeat,
     Return,
+    Int,
     Direct,
     Nop
 }
@@ -247,7 +248,7 @@ const OPCODE_TABLE: [OpcodeTableEntry; 256] =
         OpcodeTableEntry { mnemonic: "cbw", opt: OpcodeParseType::Direct}, //0x98
         OpcodeTableEntry { mnemonic: "cwd", opt: OpcodeParseType::Direct}, //0x99
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x9A
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x9B
+        OpcodeTableEntry { mnemonic: "wait", opt: OpcodeParseType::Direct}, //0x9B
         OpcodeTableEntry { mnemonic: "pushf", opt: OpcodeParseType::Direct}, //0x9C
         OpcodeTableEntry { mnemonic: "popf", opt: OpcodeParseType::Direct}, //0x9D
         OpcodeTableEntry { mnemonic: "sahf", opt: OpcodeParseType::Direct}, //0x9E
@@ -296,10 +297,10 @@ const OPCODE_TABLE: [OpcodeTableEntry; 256] =
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xC9
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xCA
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xCB
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xCC
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xCD
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xCE
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xCF
+        OpcodeTableEntry { mnemonic: "int3", opt: OpcodeParseType::Direct}, //0xCC
+        OpcodeTableEntry { mnemonic: "int", opt: OpcodeParseType::Int}, //0xCD
+        OpcodeTableEntry { mnemonic: "into", opt: OpcodeParseType::Direct}, //0xCE
+        OpcodeTableEntry { mnemonic: "iret", opt: OpcodeParseType::Direct}, //0xCF
         OpcodeTableEntry { mnemonic: "---", opt: OpcodeParseType::ShiftRot}, //0xD0
         OpcodeTableEntry { mnemonic: "---", opt: OpcodeParseType::ShiftRot}, //0xD1
         OpcodeTableEntry { mnemonic: "---", opt: OpcodeParseType::ShiftRot}, //0xD2
@@ -336,16 +337,16 @@ const OPCODE_TABLE: [OpcodeTableEntry; 256] =
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xF1
         OpcodeTableEntry { mnemonic: "repnz", opt: OpcodeParseType::Repeat}, //0xF2
         OpcodeTableEntry { mnemonic: "rep", opt: OpcodeParseType::Repeat}, //0xF3
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xF4
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xF5
+        OpcodeTableEntry { mnemonic: "hlt", opt: OpcodeParseType::Direct}, //0xF4
+        OpcodeTableEntry { mnemonic: "cmc", opt: OpcodeParseType::Direct}, //0xF5
         OpcodeTableEntry { mnemonic: "---", opt: OpcodeParseType::RmWithDisp}, //0xF6
         OpcodeTableEntry { mnemonic: "---", opt: OpcodeParseType::RmWithDisp}, //0xF7
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xF8
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xF9
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xFA
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xFB
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xFC
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xFD
+        OpcodeTableEntry { mnemonic: "clc", opt: OpcodeParseType::Direct}, //0xF8
+        OpcodeTableEntry { mnemonic: "stc", opt: OpcodeParseType::Direct}, //0xF9
+        OpcodeTableEntry { mnemonic: "cli", opt: OpcodeParseType::Direct}, //0xFA
+        OpcodeTableEntry { mnemonic: "sti", opt: OpcodeParseType::Direct}, //0xFB
+        OpcodeTableEntry { mnemonic: "cld", opt: OpcodeParseType::Direct}, //0xFC
+        OpcodeTableEntry { mnemonic: "std", opt: OpcodeParseType::Direct}, //0xFD
         OpcodeTableEntry { mnemonic: "---", opt: OpcodeParseType::RmWithDisp}, //0xFE
         OpcodeTableEntry { mnemonic: "---", opt: OpcodeParseType::RmWithDisp}, //0xFF
     ];
@@ -819,6 +820,12 @@ fn parse_return_instruction(opcode: OpcodeTableEntry, data: &[u8]) -> (usize, St
     }
 }
 
+fn parse_int_instruction(opcode: OpcodeTableEntry, data: &[u8]) -> (usize, String) {
+    let oc_mnmc = opcode.mnemonic;
+    let val = data[1];
+    (2, String::from(format!("{} {}", oc_mnmc, val)))
+}
+
 fn parse_direct_instruction(opcode: OpcodeTableEntry, _data: &[u8]) -> (usize, String) {
     (1, String::from(opcode.mnemonic))
 }
@@ -843,6 +850,7 @@ fn parse_instruction(data: &[u8]) -> (usize, String)
         OpcodeParseType::AsciiAdjust => parse_ascii_adjust_instruction(opcode, data),
         OpcodeParseType::Repeat => parse_repeat_instruction(opcode, data),
         OpcodeParseType::Return => parse_return_instruction(opcode, data),
+        OpcodeParseType::Int => parse_int_instruction(opcode, data),
         OpcodeParseType::Direct => parse_direct_instruction(opcode, data),
         OpcodeParseType::Nop => panic!("Invalid opcode 0x{:x}",data[0])
     }
@@ -2125,8 +2133,9 @@ mod test {
                    (1, String::from("ret")));
     }
 
+    #[test]
     fn test_int_instructions() {
         assert_eq!(parse_instruction(&[0xcd, 0x0d]),
-                   (3, String::from("int 13")));
+                   (2, String::from("int 13")));
     }
 }
