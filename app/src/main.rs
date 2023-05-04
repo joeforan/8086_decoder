@@ -98,12 +98,12 @@ const OPCODE_TABLE: [OpcodeTableEntry; 256] =
         OpcodeTableEntry { mnemonic: "add", opt: OpcodeParseType::ImmAcc}, //0x05
         OpcodeTableEntry { mnemonic: "push", opt: OpcodeParseType::SingleByteWithSr}, //0x06
         OpcodeTableEntry { mnemonic: "pop", opt: OpcodeParseType::SingleByteWithSr}, //0x07
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x08
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x09
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x0A
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x0B
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x0C
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x0D
+        OpcodeTableEntry { mnemonic: "or", opt: OpcodeParseType::RegRmWithDisp}, //0x08
+        OpcodeTableEntry { mnemonic: "or", opt: OpcodeParseType::RegRmWithDisp}, //0x09
+        OpcodeTableEntry { mnemonic: "or", opt: OpcodeParseType::RegRmWithDisp}, //0x0A
+        OpcodeTableEntry { mnemonic: "or", opt: OpcodeParseType::RegRmWithDisp}, //0x0B
+        OpcodeTableEntry { mnemonic: "or", opt: OpcodeParseType::ImmAcc}, //0x0C
+        OpcodeTableEntry { mnemonic: "or", opt: OpcodeParseType::ImmAcc}, //0x0D
         OpcodeTableEntry { mnemonic: "push", opt: OpcodeParseType::SingleByteWithSr}, //0x0E
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x0F
         OpcodeTableEntry { mnemonic: "adc", opt: OpcodeParseType::RegRmWithDisp}, //0x10
@@ -518,6 +518,7 @@ fn parse_imm_rm_instruction(opcode: OpcodeTableEntry, data: &[u8]) -> (usize, St
         let sub_opcode = get_three_bit_value((data[1] & SUB_CODE_MASK) >> SUB_CODE_SHFT);
         match sub_opcode {
             TBV000 => (true, "add"),
+            TBV001 => (false, "or"),
             TBV010 => (true, "adc"),
             TBV011 => (true, "sbb"),
             TBV100 => (false, "and"),
@@ -1940,4 +1941,33 @@ mod test {
         assert_eq!(parse_instruction(&[0xa9, 0x65, 0x5d]),
                    (3, String::from("test ax, 23909")));
     }
+
+    #[test]
+    fn test_or_instructions() {
+        assert_eq!(parse_instruction(&[0x08, 0xe0]),
+                   (2, String::from("or al, ah")));
+        assert_eq!(parse_instruction(&[0x08, 0xcd]),
+                   (2, String::from("or ch, cl")));
+        assert_eq!(parse_instruction(&[0x09, 0xf5]),
+                   (2, String::from("or bp, si")));
+        assert_eq!(parse_instruction(&[0x09, 0xe7]),
+                   (2, String::from("or di, sp")));
+        assert_eq!(parse_instruction(&[0x0c, 0x5d]),
+                   (2, String::from("or al, 93")));
+        assert_eq!(parse_instruction(&[0x0d, 0xa8, 0x4f]),
+                   (3, String::from("or ax, 20392")));
+        assert_eq!(parse_instruction(&[0x08, 0x6a, 0x0a]),
+                   (3, String::from("or [bp + si + 10], ch")));
+        assert_eq!(parse_instruction(&[0x09, 0x91, 0xe8, 0x03]),
+                   (4, String::from("or [bx + di + 1000], dx")));
+        assert_eq!(parse_instruction(&[0x0b, 0x5e, 0x00]),
+                   (3, String::from("or bx, [bp]")));
+        assert_eq!(parse_instruction(&[0x0b, 0x0e, 0x20, 0x11]),
+                   (4, String::from("or cx, [4384]")));
+        assert_eq!(parse_instruction(&[0x80, 0x4e, 0xd9, 0xef]),
+                   (4, String::from("or byte [bp - 39], 239")));
+        assert_eq!(parse_instruction(&[0x81, 0x88, 0x14, 0xef, 0x58, 0x28]),
+                   (6, String::from("or word [bx + si - 4332], 10328")));
+    }
+
 }
