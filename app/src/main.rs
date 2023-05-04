@@ -1695,4 +1695,41 @@ mod test {
                    (3, String::from("neg byte [bp]")));
     }
 
+    #[test]
+    fn test_mul_div_instructions() {
+        assert_eq!(parse_instruction(&[0xf6, 0xe0]),
+                   (2, String::from("mul al")));
+        assert_eq!(parse_instruction(&[0xf7, 0xe1]),
+                   (2, String::from("mul cx")));
+        assert_eq!(parse_instruction(&[0xf7, 0x66, 0x00]),
+                   (3, String::from("mul word [bp]")));
+        assert_eq!(parse_instruction(&[0xf6, 0xa1, 0xf4, 0x01]),
+                   (4, String::from("mul byte [bx + di + 500]")));
+        assert_eq!(parse_instruction(&[0xf6, 0xed]),
+                   (2, String::from("imul ch")));
+        assert_eq!(parse_instruction(&[0xf7, 0xea]),
+                   (2, String::from("imul dx")));
+        assert_eq!(parse_instruction(&[0xf6, 0x2f]),
+                   (2, String::from("imul byte [bx]")));
+        assert_eq!(parse_instruction(&[0xf7, 0x2e, 0x0b, 0x25]),
+                   (4, String::from("imul word [9483]")));
+        assert_eq!(parse_instruction(&[0xf6, 0xf3,]),
+                   (2, String::from("div bl")));
+        assert_eq!(parse_instruction(&[0xf7, 0xf4,]),
+                   (2, String::from("div sp")));
+        assert_eq!(parse_instruction(&[0xf6, 0xb0, 0xae, 0x0b]),
+                   (4, String::from("div byte [bx + si + 2990]")));
+        assert_eq!(parse_instruction(&[0xf7, 0xb3, 0xe8, 0x03]),
+                   (4, String::from("div word [bp + di + 1000]")));
+        assert_eq!(parse_instruction(&[0xf7, 0xf8]),
+                   (2, String::from("idiv ax")));
+        assert_eq!(parse_instruction(&[0xf7, 0xfe]),
+                   (2, String::from("idiv si")));
+        assert_eq!(parse_instruction(&[0xf6, 0x3a]),
+                   (2, String::from("idiv byte [bp + si]")));
+        assert_eq!(parse_instruction(&[0xf7, 0xbf, 0xed, 0x01]),
+                   (4, String::from("idiv word [bx + 493]")));
+    }
+
+
 }
