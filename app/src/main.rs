@@ -50,6 +50,7 @@ enum OpcodeParseType
     Repeat,
     Return,
     Int,
+    Lock,
     Direct,
     Nop
 }
@@ -333,7 +334,7 @@ const OPCODE_TABLE: [OpcodeTableEntry; 256] =
         OpcodeTableEntry { mnemonic: "in ax, dx", opt: OpcodeParseType::Direct}, //0xED
         OpcodeTableEntry { mnemonic: "out dx, al", opt: OpcodeParseType::Direct}, //0xEE
         OpcodeTableEntry { mnemonic: "out dx, ax", opt: OpcodeParseType::Direct}, //0xEF
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xF0
+        OpcodeTableEntry { mnemonic: "lock", opt: OpcodeParseType::Lock}, //0xF0
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xF1
         OpcodeTableEntry { mnemonic: "repnz", opt: OpcodeParseType::Repeat}, //0xF2
         OpcodeTableEntry { mnemonic: "rep", opt: OpcodeParseType::Repeat}, //0xF3
@@ -830,6 +831,11 @@ fn parse_direct_instruction(opcode: OpcodeTableEntry, _data: &[u8]) -> (usize, S
     (1, String::from(opcode.mnemonic))
 }
 
+fn parse_lock_instruction(_opcode: OpcodeTableEntry, data: &[u8]) -> (usize, String){
+    let (sub_len, sub_str) = parse_instruction(&data[1..]);
+    (sub_len + 1, String::from(format!("lock {}", sub_str)))
+}
+
 fn parse_instruction(data: &[u8]) -> (usize, String)
 {
     let opcode = get_opcode_info(data[0]);
@@ -851,6 +857,7 @@ fn parse_instruction(data: &[u8]) -> (usize, String)
         OpcodeParseType::Repeat => parse_repeat_instruction(opcode, data),
         OpcodeParseType::Return => parse_return_instruction(opcode, data),
         OpcodeParseType::Int => parse_int_instruction(opcode, data),
+        OpcodeParseType::Lock => parse_lock_instruction(opcode, data),
         OpcodeParseType::Direct => parse_direct_instruction(opcode, data),
         OpcodeParseType::Nop => panic!("Invalid opcode 0x{:x}",data[0])
     }
@@ -2143,6 +2150,6 @@ mod test {
         assert_eq!(parse_instruction(&[0xf0, 0xf6, 0x96, 0xb1, 0x26]),
                    (5, String::from("lock not byte [bp + 9905]")));
         assert_eq!(parse_instruction(&[0xf0, 0x86, 0x06, 0x64, 0x00]),
-                   (5, String::from("lock xchg [100], al")));
+                   (5, String::from("lock xchg al, [100]")));
     }
 }
