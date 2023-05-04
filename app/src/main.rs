@@ -123,12 +123,12 @@ const OPCODE_TABLE: [OpcodeTableEntry; 256] =
         OpcodeTableEntry { mnemonic: "sbb", opt: OpcodeParseType::ImmAcc}, //0x1D
         OpcodeTableEntry { mnemonic: "push", opt: OpcodeParseType::SingleByteWithSr}, //0x1E
         OpcodeTableEntry { mnemonic: "pop", opt: OpcodeParseType::SingleByteWithSr}, //0x1F
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x20
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x21
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x22
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x23
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x24
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x25
+        OpcodeTableEntry { mnemonic: "and", opt: OpcodeParseType::RegRmWithDisp}, //0x20
+        OpcodeTableEntry { mnemonic: "and", opt: OpcodeParseType::RegRmWithDisp}, //0x21
+        OpcodeTableEntry { mnemonic: "and", opt: OpcodeParseType::RegRmWithDisp}, //0x22
+        OpcodeTableEntry { mnemonic: "and", opt: OpcodeParseType::RegRmWithDisp}, //0x23
+        OpcodeTableEntry { mnemonic: "and", opt: OpcodeParseType::ImmAcc}, //0x24
+        OpcodeTableEntry { mnemonic: "and", opt: OpcodeParseType::ImmAcc}, //0x25
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x26
         OpcodeTableEntry { mnemonic: "daa", opt: OpcodeParseType::Direct}, //0x27
         OpcodeTableEntry { mnemonic: "sub", opt: OpcodeParseType::RegRmWithDisp}, //0x28
@@ -515,18 +515,19 @@ fn parse_imm_rm_instruction(opcode: OpcodeTableEntry, data: &[u8]) -> (usize, St
     use BitValue::*;
     use TwoBitValue::*;
     use ThreeBitValue::*;
-    let oc_mnmnc = if (data[0] & 0xFC) == 0x80 {
+    let (use_s_flag, oc_mnmnc) = if (data[0] & 0xFC) == 0x80 {
         let sub_opcode = get_three_bit_value((data[1] & SUB_CODE_MASK) >> SUB_CODE_SHFT);
         match sub_opcode {
-            TBV000 => "add",
-            TBV010 => "adc",
-            TBV011 => "sbb",
-            TBV101 => "sub",
-            TBV111 => "cmp",
+            TBV000 => (true, "add"),
+            TBV010 => (true, "adc"),
+            TBV011 => (true, "sbb"),
+            TBV100 => (false, "and"),
+            TBV101 => (true, "sub"),
+            TBV111 => (true, "cmp"),
             _ => panic!("Unknown subopcode")
         }
     } else {
-        opcode.mnemonic
+        (false, opcode.mnemonic)
     };
     let w_flag = get_bit_value((data[0] & W_MASK) >> W_SHFT);
     let rm_code = get_three_bit_value((data[1] & RM_MASK) >> RM_SHFT);
@@ -534,8 +535,14 @@ fn parse_imm_rm_instruction(opcode: OpcodeTableEntry, data: &[u8]) -> (usize, St
 
     if mod_code != DBV11 {
         let (data_offset, reg_string) = get_mem_ptr_and_displacement(data, rm_code, mod_code);
-        let data_idx: usize = if (mod_code == DBV01) || (mod_code == DBV10) ||
-            ((mod_code == DBV00) & (rm_code == TBV110)) { 4 } else { 2 };
+        let data_idx: usize = if (mod_code == DBV10) || ((mod_code == DBV00) & (rm_code == TBV110)) {
+            4
+        } else if mod_code == DBV01 {
+            3
+        } else {
+            2
+        };
+
         if (data[0] & 0xFE) == 0xC6 {
             return match w_flag {
                 BV0 =>  (data_offset + 3, String::from(format!("{} {}, byte {}", oc_mnmnc, reg_string, data[data_idx]))),
@@ -546,13 +553,18 @@ fn parse_imm_rm_instruction(opcode: OpcodeTableEntry, data: &[u8]) -> (usize, St
             return match w_flag {
                 BV0 =>  (data_offset + 3, String::from(format!("{} byte {}, {}", oc_mnmnc, reg_string, data[data_idx]))),
                 BV1 =>  {
-                    let s_flag = (data[0] & S_MASK) >> S_SHFT;
-                    if s_flag == 0 {
-                        (data_offset + 3, String::from(format!("{} word {}, {}", oc_mnmnc, reg_string,
-                                                                        read_u16_val(&data[data_idx..data_idx+2]))))
+                    if use_s_flag {
+                        let s_flag = (data[0] & S_MASK) >> S_SHFT;
+                        if s_flag == 0 {
+                            (data_offset + 3, String::from(format!("{} word {}, {}", oc_mnmnc, reg_string,
+                                                                   read_u16_val(&data[data_idx..data_idx+2]))))
+                        } else {
+                            (data_offset + 3, String::from(format!("{} word {}, {}", oc_mnmnc, reg_string,
+                                                                   (data[data_idx] as i8) as i16)))
+                        }
                     } else {
-                        (data_offset + 3, String::from(format!("{} word {}, {}", oc_mnmnc, reg_string,
-                                                                        (data[data_idx] as i8) as i16)))
+                        (data_offset + 4, String::from(format!("{} word {}, {}", oc_mnmnc, reg_string,
+                                                               read_i16_val(&data[data_idx..data_idx+2]))))
                     }
                 }
             }
@@ -1073,9 +1085,11 @@ mod test {
     #[test]
     fn test_explicit_sizes() {
         let test_data_w3: [[u8; 3]; 1] = [[0xc6, 0x03, 0x07]];
+        let test_data_w4: [[u8; 4]; 1] = [[0xc6, 0x46, 0xd9, 0xef]];
         let test_data_w6: [[u8; 6]; 1] = [[0xc7, 0x85, 0x85, 0x03, 0x5b, 0x01]];
 
         assert_eq!(parse_instruction(&test_data_w3[0]), (3, String::from("mov [bp + di], byte 7")));
+        assert_eq!(parse_instruction(&test_data_w4[0]), (4, String::from("mov [bp - 39], byte 239")));
         assert_eq!(parse_instruction(&test_data_w6[0]), (6, String::from("mov [di + 901], word 347")));
     }
 
