@@ -46,6 +46,7 @@ enum OpcodeParseType
     SingleByteWithReg,
     SingleByteWithSr,
     InOut,
+    AsciiAdjust,
     Direct,
     Nop
 }
@@ -238,8 +239,8 @@ const OPCODE_TABLE: [OpcodeTableEntry; 256] =
         OpcodeTableEntry { mnemonic: "xchg ax,", opt: OpcodeParseType::SingleByteWithReg}, //0x95
         OpcodeTableEntry { mnemonic: "xchg ax,", opt: OpcodeParseType::SingleByteWithReg}, //0x96
         OpcodeTableEntry { mnemonic: "xchg ax,", opt: OpcodeParseType::SingleByteWithReg}, //0x97
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x98
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x99
+        OpcodeTableEntry { mnemonic: "cbw", opt: OpcodeParseType::Direct}, //0x98
+        OpcodeTableEntry { mnemonic: "cwd", opt: OpcodeParseType::Direct}, //0x99
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x9A
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x9B
         OpcodeTableEntry { mnemonic: "pushf", opt: OpcodeParseType::Direct}, //0x9C
@@ -298,8 +299,8 @@ const OPCODE_TABLE: [OpcodeTableEntry; 256] =
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xD1
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xD2
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xD3
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xD4
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xD5
+        OpcodeTableEntry { mnemonic: "aam", opt: OpcodeParseType::AsciiAdjust}, //0xD4
+        OpcodeTableEntry { mnemonic: "aad", opt: OpcodeParseType::AsciiAdjust}, //0xD5
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xD6
         OpcodeTableEntry { mnemonic: "xlat", opt: OpcodeParseType::Direct}, //0xD7
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xD8
@@ -724,6 +725,13 @@ fn parse_inout_instruction(opcode: OpcodeTableEntry, data: &[u8]) -> (usize, Str
     }
 }
 
+fn parse_ascii_adjust_instruction(opcode: OpcodeTableEntry, data: &[u8]) -> (usize, String) {
+    if data[1] != 0x0A {
+        panic!("Invalid second byte for ascii adjust for mul/div instruction")
+    }
+    (2, String::from(format!("{}", opcode.mnemonic)))
+}
+
 fn parse_direct_instruction(opcode: OpcodeTableEntry, _data: &[u8]) -> (usize, String) {
     (1, String::from(opcode.mnemonic))
 }
@@ -744,6 +752,7 @@ fn parse_instruction(data: &[u8]) -> (usize, String)
         OpcodeParseType::SingleByteWithSr  => parse_single_byte_instruction_with_sr(opcode, data),
         OpcodeParseType::SingleByteWithReg => parse_single_byte_instruction_with_reg(opcode, data),
         OpcodeParseType::InOut => parse_inout_instruction(opcode, data),
+        OpcodeParseType::AsciiAdjust => parse_ascii_adjust_instruction(opcode, data),
         OpcodeParseType::Direct => parse_direct_instruction(opcode, data),
         OpcodeParseType::Nop => panic!("Invalid opcode 0x{:x}",data[0])
     }
