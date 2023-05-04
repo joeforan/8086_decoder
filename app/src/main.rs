@@ -1613,6 +1613,30 @@ mod test {
                    (1, String::from("cbw")));
         assert_eq!(parse_instruction(&[0x99]),
                    (1, String::from("cwd")));
+        assert_eq!(parse_instruction(&[0xcc]),
+                   (1, String::from("int3")));
+        assert_eq!(parse_instruction(&[0xce]),
+                   (1, String::from("into")));
+        assert_eq!(parse_instruction(&[0xcf]),
+                   (1, String::from("iret")));
+        assert_eq!(parse_instruction(&[0xf8]),
+                   (1, String::from("clc")));
+        assert_eq!(parse_instruction(&[0xf5]),
+                   (1, String::from("cmc")));
+        assert_eq!(parse_instruction(&[0xf9]),
+                   (1, String::from("stc")));
+        assert_eq!(parse_instruction(&[0xfc]),
+                   (1, String::from("cld")));
+        assert_eq!(parse_instruction(&[0xfd]),
+                   (1, String::from("std")));
+        assert_eq!(parse_instruction(&[0xfa]),
+                   (1, String::from("cli")));
+        assert_eq!(parse_instruction(&[0xfb]),
+                   (1, String::from("sti")));
+        assert_eq!(parse_instruction(&[0xf4]),
+                   (1, String::from("hlt")));
+        assert_eq!(parse_instruction(&[0x9b]),
+                   (1, String::from("wait")));
     }
 
     #[test]
@@ -2099,6 +2123,10 @@ mod test {
                    (3, String::from("ret 500")));
         assert_eq!(parse_instruction(&[0xc3]),
                    (1, String::from("ret")));
+    }
 
+    fn test_int_instructions() {
+        assert_eq!(parse_instruction(&[0xcd, 0x0d]),
+                   (3, String::from("int 13")));
     }
 }
