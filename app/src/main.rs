@@ -1493,6 +1493,10 @@ mod test {
                    (1, String::from("aaa")));
         assert_eq!(parse_instruction(&[0x27]),
                    (1, String::from("daa")));
+        assert_eq!(parse_instruction(&[0x3f]),
+                   (1, String::from("aas")));
+        assert_eq!(parse_instruction(&[0x2f]),
+                   (1, String::from("das")));
     }
 
     #[test]
