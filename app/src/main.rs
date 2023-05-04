@@ -1486,6 +1486,10 @@ mod test {
                    (1, String::from("pushf")));
         assert_eq!(parse_instruction(&[0x9d]),
                    (1, String::from("popf")));
+        assert_eq!(parse_instruction(&[0x37]),
+                   (1, String::from("aaa")));
+        assert_eq!(parse_instruction(&[0x27]),
+                   (1, String::from("daa")));
     }
 
     #[test]
