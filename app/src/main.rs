@@ -1754,11 +1754,28 @@ mod test {
         assert_eq!(parse_instruction(&[0xf7, 0xbf, 0xed, 0x01]),
                    (4, String::from("idiv word [bx + 493]")));
     }
+
     #[test]
     fn test_ascii_adjust_instructions() {
         assert_eq!(parse_instruction(&[0xd4, 0x0a]),
                    (2, String::from("aam")));
         assert_eq!(parse_instruction(&[0xd5, 0x0a]),
                    (2, String::from("aad")));
+    }
+
+    #[test]
+    fn test_not_instructions() {
+        assert_eq!(parse_instruction(&[0xf6, 0xd4]),
+                   (2, String::from("not ah")));
+        assert_eq!(parse_instruction(&[0xf6, 0xd3]),
+                   (2, String::from("not bl")));
+        assert_eq!(parse_instruction(&[0xf7, 0xd4]),
+                   (2, String::from("not sp")));
+        assert_eq!(parse_instruction(&[0xf7, 0xd6]),
+                   (2, String::from("not si")));
+        assert_eq!(parse_instruction(&[0xf7, 0x56, 0x00]),
+                   (3, String::from("not word [bp]")));
+        assert_eq!(parse_instruction(&[0xf6, 0x96, 0xb1, 0x2]),
+                   (4, String::from("not byte [bp + 9905]")));
     }
 }
