@@ -1880,4 +1880,32 @@ mod test {
         assert_eq!(parse_instruction(&[0xd3, 0x1f]),
                    (2, String::from("rcr word [bx], cl")));
     }
+
+    #[test]
+    fn test_and_instructions(){
+        assert_eq!(parse_instruction(&[0x20, 0xe0]),
+                   (2, String::from("and al, ah")));
+        assert_eq!(parse_instruction(&[0x20, 0xcd]),
+                   (2, String::from("and ch, cl")));
+        assert_eq!(parse_instruction(&[0x21, 0xf5]),
+                   (2, String::from("and bp, si")));
+        assert_eq!(parse_instruction(&[0x21, 0xe7]),
+                   (2, String::from("and di, sp")));
+        assert_eq!(parse_instruction(&[0x24, 0x5d]),
+                   (2, String::from("and al, 93")));
+        assert_eq!(parse_instruction(&[0x25, 0xa8, 0x4f]),
+                   (3, String::from("and ax, 20392")));
+        assert_eq!(parse_instruction(&[0x20, 0x6a, 0x0a]),
+                   (3, String::from("and [bp + si + 10], ch")));
+        assert_eq!(parse_instruction(&[0x21, 0x91, 0xe8, 0x03]),
+                   (4, String::from("and [bx + di + 1000], dx")));
+        assert_eq!(parse_instruction(&[0x23, 0x5e, 0x00]),
+                   (3, String::from("and bx, [bp]")));
+        assert_eq!(parse_instruction(&[0x23, 0x0e, 0x20, 0x11]),
+                   (4, String::from("and cx, [4384]")));
+        assert_eq!(parse_instruction(&[0x80, 0x66, 0xd9, 0xef]),
+                   (4, String::from("and byte [bp - 39], 239")));
+        assert_eq!(parse_instruction(&[0x81, 0xa0, 0x14, 0xef, 0x58, 0x28]),
+                   (6, String::from("and word [bx + si - 4332], 10328")));
+    }
 }
