@@ -43,6 +43,7 @@ enum OpcodeParseType
     ImmAcc,
     Jump,
     RmWithDisp,
+    ShiftRot,
     SingleByteWithReg,
     SingleByteWithSr,
     InOut,
@@ -56,6 +57,9 @@ const D_SHFT: u8 = 1;
 
 const S_MASK: u8 = 0x02;
 const S_SHFT: u8 = 1;
+
+const V_MASK: u8 = 0x02;
+const V_SHFT: u8 = 1;
 
 const W_MASK: u8 = 0x01;
 const W_SHFT: u8 = 0;
@@ -295,10 +299,10 @@ const OPCODE_TABLE: [OpcodeTableEntry; 256] =
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xCD
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xCE
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xCF
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xD0
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xD1
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xD2
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xD3
+        OpcodeTableEntry { mnemonic: "---", opt: OpcodeParseType::ShiftRot}, //0xD0
+        OpcodeTableEntry { mnemonic: "---", opt: OpcodeParseType::ShiftRot}, //0xD1
+        OpcodeTableEntry { mnemonic: "---", opt: OpcodeParseType::ShiftRot}, //0xD2
+        OpcodeTableEntry { mnemonic: "---", opt: OpcodeParseType::ShiftRot}, //0xD3
         OpcodeTableEntry { mnemonic: "aam", opt: OpcodeParseType::AsciiAdjust}, //0xD4
         OpcodeTableEntry { mnemonic: "aad", opt: OpcodeParseType::AsciiAdjust}, //0xD5
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xD6
@@ -652,6 +656,43 @@ fn parse_jmp_instruction(opcode: OpcodeTableEntry, data: &[u8]) -> (usize, Strin
     (2, String::from(format!("{} {} {}", oc_mnmc, OFFSET_STR, jump_offset)))
 }
 
+fn parse_shift_rot_instruction(_opcode: OpcodeTableEntry, data: &[u8]) -> (usize, String) {
+    use BitValue::*;
+    use TwoBitValue::*;
+    use ThreeBitValue::*;
+    let oc_mnmc = match get_three_bit_value((data[1] & SUB_CODE_MASK) >> SUB_CODE_SHFT) {
+        TBV000 => "rol",
+        TBV001 => "ror",
+        TBV010 => "rcl",
+        TBV011 => "rcr",
+        TBV100 => "shl",
+        TBV101 => "shr",
+        TBV111 => "sar",
+        _ => panic!("Unsupported subcode")
+    };
+    let w_flag = get_bit_value((data[0] & W_MASK) >> W_SHFT);
+    let v_flag = get_bit_value((data[0] & V_MASK) >> V_SHFT);
+    let mod_code = get_two_bit_value((data[1] & MOD_MASK) >> MOD_SHFT);
+    let rm_code = get_three_bit_value((data[1] & RM_MASK) >> RM_SHFT);
+    let t = get_mem_ptr_and_displacement(data, rm_code, mod_code);
+
+    match mod_code {
+        DBV11 => {
+            match v_flag {
+                BV0 => (2 + t.0, String::from(format!("{} {}, 1", oc_mnmc, t.1))),
+                BV1 => (2 + t.0, String::from(format!("{} {}, cl", oc_mnmc, t.1))),
+            }
+        },
+        _ => {
+            let size_str = match w_flag { BV0 => "byte", BV1 => "word"};
+            match v_flag {
+                BV0 => (2 + t.0, String::from(format!("{} {} {}, 1", oc_mnmc, size_str, t.1))),
+                BV1 => (2 + t.0, String::from(format!("{} {} {}, cl", oc_mnmc, size_str, t.1))),
+            }
+        }
+    }
+}
+
 fn parse_rm_with_disp_instruction(_opcode: OpcodeTableEntry, data: &[u8]) -> (usize, String) {
     use BitValue::*;
     use TwoBitValue::*;
@@ -748,6 +789,7 @@ fn parse_instruction(data: &[u8]) -> (usize, String)
         OpcodeParseType::AccMem =>  parse_acc_mem_instruction(opcode, data),
         OpcodeParseType::ImmAcc =>  parse_imm_acc_instruction(opcode, data),
         OpcodeParseType::RmWithDisp => parse_rm_with_disp_instruction(opcode, data),
+        OpcodeParseType::ShiftRot => parse_shift_rot_instruction(opcode, data),
         OpcodeParseType::Jump => parse_jmp_instruction(opcode, data),
         OpcodeParseType::SingleByteWithSr  => parse_single_byte_instruction_with_sr(opcode, data),
         OpcodeParseType::SingleByteWithReg => parse_single_byte_instruction_with_reg(opcode, data),
