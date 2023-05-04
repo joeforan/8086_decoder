@@ -138,12 +138,12 @@ const OPCODE_TABLE: [OpcodeTableEntry; 256] =
         OpcodeTableEntry { mnemonic: "sub", opt: OpcodeParseType::ImmAcc}, //0x2D
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x2E
         OpcodeTableEntry { mnemonic: "das", opt: OpcodeParseType::Direct}, //0x2F
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x30
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x31
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x32
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x33
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x34
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x35
+        OpcodeTableEntry { mnemonic: "xor", opt: OpcodeParseType::RegRmWithDisp}, //0x30
+        OpcodeTableEntry { mnemonic: "xor", opt: OpcodeParseType::RegRmWithDisp}, //0x31
+        OpcodeTableEntry { mnemonic: "xor", opt: OpcodeParseType::RegRmWithDisp}, //0x32
+        OpcodeTableEntry { mnemonic: "xor", opt: OpcodeParseType::RegRmWithDisp}, //0x33
+        OpcodeTableEntry { mnemonic: "xor", opt: OpcodeParseType::ImmAcc}, //0x34
+        OpcodeTableEntry { mnemonic: "xor", opt: OpcodeParseType::ImmAcc}, //0x35
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x36
         OpcodeTableEntry { mnemonic: "aaa", opt: OpcodeParseType::Direct}, //0x37
         OpcodeTableEntry { mnemonic: "cmp", opt: OpcodeParseType::RegRmWithDisp}, //0x38
@@ -523,8 +523,8 @@ fn parse_imm_rm_instruction(opcode: OpcodeTableEntry, data: &[u8]) -> (usize, St
             TBV011 => (true, "sbb"),
             TBV100 => (false, "and"),
             TBV101 => (true, "sub"),
+            TBV110 => (false, "xor"),
             TBV111 => (true, "cmp"),
-            _ => panic!("Unknown subopcode")
         }
     } else {
         (false, opcode.mnemonic)
@@ -1970,4 +1970,32 @@ mod test {
                    (6, String::from("or word [bx + si - 4332], 10328")));
     }
 
+    #[test]
+    fn test_xor_instructions() {
+        assert_eq!(parse_instruction(&[0x30, 0xe0]),
+                   (2, String::from("xor al, ah")));
+        assert_eq!(parse_instruction(&[0x30, 0xcd]),
+                   (2, String::from("xor ch, cl")));
+        assert_eq!(parse_instruction(&[0x31, 0xf5]),
+                   (2, String::from("xor bp, si")));
+        assert_eq!(parse_instruction(&[0x31, 0xe7]),
+                   (2, String::from("xor di, sp")));
+        assert_eq!(parse_instruction(&[0x34, 0x5d]),
+                   (2, String::from("xor al, 93")));
+        assert_eq!(parse_instruction(&[0x35, 0xa8, 0x4f]),
+                   (3, String::from("xor ax, 20392")));
+        assert_eq!(parse_instruction(&[0x30, 0x6a, 0x0a]),
+                   (3, String::from("xor [bp + si + 10], ch")));
+        assert_eq!(parse_instruction(&[0x31, 0x91, 0xe8, 0x03]),
+                   (4, String::from("xor [bx + di + 1000], dx")));
+        assert_eq!(parse_instruction(&[0x33, 0x5e, 0x00]),
+                   (3, String::from("xor bx, [bp]")));
+        assert_eq!(parse_instruction(&[0x33, 0x0e, 0x20, 0x11]),
+                   (4, String::from("xor cx, [4384]")));
+        assert_eq!(parse_instruction(&[0x80, 0x76, 0xd9, 0xef]),
+                   (4, String::from("xor byte [bp - 39], 239")));
+        assert_eq!(parse_instruction(&[0x81, 0xb0, 0x14, 0xef, 0x58, 0x28]),
+                   (6, String::from("xor word [bx + si - 4332], 10328")));
+
+    }
 }
