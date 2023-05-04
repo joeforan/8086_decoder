@@ -499,6 +499,7 @@ fn parse_imm_reg_instruction(opcode: OpcodeTableEntry, data: &[u8]) -> (usize, S
 }
 
 fn parse_imm_rm_instruction(opcode: OpcodeTableEntry, data: &[u8]) -> (usize, String) {
+    use BitValue::*;
     use TwoBitValue::*;
     use ThreeBitValue::*;
     let oc_mnmnc = if (data[0] & 0xFC) == 0x80 {
@@ -522,14 +523,14 @@ fn parse_imm_rm_instruction(opcode: OpcodeTableEntry, data: &[u8]) -> (usize, St
             ((mod_code == DBV00) & (rm_code == TBV110)) { 4 } else { 2 };
         if (data[0] & 0xFE) == 0xC6 {
             return match w_flag {
-                BitValue::BV0 =>  (data_offset + 3, String::from(format!("{} {}, byte {}", oc_mnmnc, reg_string, data[data_idx]))),
-                BitValue::BV1 =>  (data_offset + 4, String::from(format!("{} {}, word {}", oc_mnmnc, reg_string,
+                BV0 =>  (data_offset + 3, String::from(format!("{} {}, byte {}", oc_mnmnc, reg_string, data[data_idx]))),
+                BV1 =>  (data_offset + 4, String::from(format!("{} {}, word {}", oc_mnmnc, reg_string,
                                                                       read_u16_val(&data[data_idx..data_idx+2])))),
             }
         } else {
             return match w_flag {
-                BitValue::BV0 =>  (data_offset + 3, String::from(format!("{} byte {}, {}", oc_mnmnc, reg_string, data[data_idx]))),
-                BitValue::BV1 =>  {
+                BV0 =>  (data_offset + 3, String::from(format!("{} byte {}, {}", oc_mnmnc, reg_string, data[data_idx]))),
+                BV1 =>  {
                     let s_flag = (data[0] & S_MASK) >> S_SHFT;
                     if s_flag == 0 {
                         (data_offset + 3, String::from(format!("{} word {}, {}", oc_mnmnc, reg_string,
@@ -544,7 +545,15 @@ fn parse_imm_rm_instruction(opcode: OpcodeTableEntry, data: &[u8]) -> (usize, St
     } else {
         let rm_string = get_reg_str(w_flag, rm_code);
         let data_idx: usize = 2;
-        (3, String::from(format!("{} {}, {}", oc_mnmnc, rm_string, data[data_idx])))
+        if oc_mnmnc == "mov" {
+            (3, String::from(format!("{} {}, {}", oc_mnmnc, rm_string, data[data_idx])))
+        } else {
+            let sw_flag = get_two_bit_value(data[0] & 0x3);
+            match sw_flag {
+                DBV01 => (4, String::from(format!("{} {}, {}", oc_mnmnc, rm_string, read_u16_val(&data[data_idx..data_idx+2])))),
+                _ => (3, String::from(format!("{} {}, {}", oc_mnmnc, rm_string, data[data_idx]))),
+            }
+        }
     }
 }
 
@@ -1475,5 +1484,23 @@ mod test {
                    (4, String::from("les sp, [bp - 1003]")));
         assert_eq!(parse_instruction(&[0xc4, 0x78, 0xf9]),
                    (3, String::from("les di, [bx + si - 7]")));
+    }
+
+    #[test]
+    fn test_add_instructions_5() {
+        assert_eq!(parse_instruction(&[0x81, 0xc4, 0x88, 0x01]),
+                   (4, String::from("add sp, 392")));
+        assert_eq!(parse_instruction(&[0x83, 0xc6, 0x05]),
+                   (3, String::from("add si, 5")));
+        assert_eq!(parse_instruction(&[0x05, 0xe8, 0x03]),
+                   (3, String::from("add ax, 1000")));
+        assert_eq!(parse_instruction(&[0x80, 0xc4, 0x1e]),
+                   (3, String::from("add ah, 30")));
+        assert_eq!(parse_instruction(&[0x04, 0x09]),
+                   (2, String::from("add al, 9")));
+        assert_eq!(parse_instruction(&[0x01, 0xd9]),
+                   (2, String::from("add cx, bx")));
+        assert_eq!(parse_instruction(&[0x00, 0xc5]),
+                   (2, String::from("add ch, al")));
     }
 }
