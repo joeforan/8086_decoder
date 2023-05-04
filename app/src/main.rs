@@ -2,7 +2,6 @@ use std::env::args;
 use std::fs::read;
 use std::collections::{BTreeSet, HashMap};
 
-
 const OFFSET_STR: &str = "#OFFSET#";
 
 #[derive(PartialEq, Clone, Copy)]
@@ -223,8 +222,8 @@ const OPCODE_TABLE: [OpcodeTableEntry; 256] =
         OpcodeTableEntry { mnemonic: "---", opt: OpcodeParseType::ImmRm}, //0x81
         OpcodeTableEntry { mnemonic: "---", opt: OpcodeParseType::ImmRm}, //0x82
         OpcodeTableEntry { mnemonic: "---", opt: OpcodeParseType::ImmRm}, //0x83
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x84
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x85
+        OpcodeTableEntry { mnemonic: "test", opt: OpcodeParseType::RegRmWithDisp}, //0x84
+        OpcodeTableEntry { mnemonic: "test", opt: OpcodeParseType::RegRmWithDisp}, //0x85
         OpcodeTableEntry { mnemonic: "xchg", opt: OpcodeParseType::RegRmWithDispD1}, //0x86
         OpcodeTableEntry { mnemonic: "xchg", opt: OpcodeParseType::RegRmWithDispD1}, //0x87
         OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::RegRmWithDisp}, //0x88
@@ -259,8 +258,8 @@ const OPCODE_TABLE: [OpcodeTableEntry; 256] =
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xA5
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xA6
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xA7
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xA8
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xA9
+        OpcodeTableEntry { mnemonic: "test", opt: OpcodeParseType::ImmAcc}, //0xA8
+        OpcodeTableEntry { mnemonic: "test", opt: OpcodeParseType::ImmAcc}, //0xA9
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xAA
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xAB
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xAC
@@ -705,7 +704,7 @@ fn parse_shift_rot_instruction(_opcode: OpcodeTableEntry, data: &[u8]) -> (usize
     }
 }
 
-fn parse_rm_with_disp_instruction(_opcode: OpcodeTableEntry, data: &[u8]) -> (usize, String) {
+fn parse_rm_with_disp_instruction(opcode: OpcodeTableEntry, data: &[u8]) -> (usize, String) {
     use BitValue::*;
     use TwoBitValue::*;
     use ThreeBitValue::*;
@@ -716,6 +715,9 @@ fn parse_rm_with_disp_instruction(_opcode: OpcodeTableEntry, data: &[u8]) -> (us
                     "pop"
                 } else if (data[0] &  0xFE) == 0xFE {
                     "inc"
+                } else if (data[0] & 0xFE) == 0xF6 {
+                    let mod_opcode: OpcodeTableEntry = OpcodeTableEntry {mnemonic: "test", opt: opcode.opt};
+                    return parse_imm_rm_instruction(mod_opcode, data);
                 } else {
                     panic!("unknown opcode/subcode")
                 }
@@ -1928,14 +1930,14 @@ mod test {
         assert_eq!(parse_instruction(&[0x85, 0xcb]),
                    (2, String::from("test bx, cx")));
         assert_eq!(parse_instruction(&[0x84, 0xb6, 0x86, 0x01]),
-                   (2, String::from("test dh, [bp + 390]")));
+                   (4, String::from("test [bp + 390], dh")));
         assert_eq!(parse_instruction(&[0x85, 0x76, 0x02]),
-                   (2, String::from("test [bp + 2], si")));
+                   (3, String::from("test [bp + 2], si")));
         assert_eq!(parse_instruction(&[0xf6, 0xc3, 0x14]),
-                   (2, String::from("test bl, 20")));
+                  (3, String::from("test bl, 20")));
         assert_eq!(parse_instruction(&[0xf6, 0x07, 0x22]),
-                   (2, String::from("test byte [bx], 34")));
+                   (3, String::from("test byte [bx], 34")));
         assert_eq!(parse_instruction(&[0xa9, 0x65, 0x5d]),
-                   (2, String::from("test ax, 23909")));
+                   (3, String::from("test ax, 23909")));
     }
 }
