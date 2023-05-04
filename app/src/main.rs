@@ -1922,4 +1922,20 @@ mod test {
         assert_eq!(parse_instruction(&[0x81, 0xa0, 0x14, 0xef, 0x58, 0x28]),
                    (6, String::from("and word [bx + si - 4332], 10328")));
     }
+
+    #[test]
+    fn test_test_instructions() {
+        assert_eq!(parse_instruction(&[0x85, 0xcb]),
+                   (2, String::from("test bx, cx")));
+        assert_eq!(parse_instruction(&[0x84, 0xb6, 0x86, 0x01]),
+                   (2, String::from("test dh, [bp + 390]")));
+        assert_eq!(parse_instruction(&[0x85, 0x76, 0x02]),
+                   (2, String::from("test [bp + 2], si")));
+        assert_eq!(parse_instruction(&[0xf6, 0xc3, 0x14]),
+                   (2, String::from("test bl, 20")));
+        assert_eq!(parse_instruction(&[0xf6, 0x07, 0x22]),
+                   (2, String::from("test byte [bx], 34")));
+        assert_eq!(parse_instruction(&[0xa9, 0x65, 0x5d]),
+                   (2, String::from("test ax, 23909")));
+    }
 }
