@@ -1508,6 +1508,10 @@ mod test {
                    (1, String::from("aas")));
         assert_eq!(parse_instruction(&[0x2f]),
                    (1, String::from("das")));
+        assert_eq!(parse_instruction(&[0x98]),
+                   (1, String::from("cbw")));
+        assert_eq!(parse_instruction(&[0x99]),
+                   (1, String::from("cwd")));
     }
 
     #[test]
@@ -1741,6 +1745,11 @@ mod test {
         assert_eq!(parse_instruction(&[0xf7, 0xbf, 0xed, 0x01]),
                    (4, String::from("idiv word [bx + 493]")));
     }
-
-
+    #[test]
+    fn test_ascii_adjust_instructions() {
+        assert_eq!(parse_instruction(&[0xd4, 0x0a]),
+                   (2, String::from("aam")));
+        assert_eq!(parse_instruction(&[0xd5, 0x0a]),
+                   (2, String::from("aad")));
+    }
 }
