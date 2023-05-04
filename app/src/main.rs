@@ -668,6 +668,7 @@ fn parse_rm_with_disp_instruction(_opcode: OpcodeTableEntry, data: &[u8]) -> (us
                 }
             },
             TBV001 => "dec",
+            TBV010 => "not",
             TBV011 => "neg",
             TBV100 => "mul",
             TBV101 => "imul",
@@ -681,7 +682,6 @@ fn parse_rm_with_disp_instruction(_opcode: OpcodeTableEntry, data: &[u8]) -> (us
                 }
             }
             TBV111 => "idiv",
-            _ => panic!("unknown subcode")
         }
     };
 
@@ -1775,7 +1775,7 @@ mod test {
                    (2, String::from("not si")));
         assert_eq!(parse_instruction(&[0xf7, 0x56, 0x00]),
                    (3, String::from("not word [bp]")));
-        assert_eq!(parse_instruction(&[0xf6, 0x96, 0xb1, 0x2]),
+        assert_eq!(parse_instruction(&[0xf6, 0x96, 0xb1, 0x26]),
                    (4, String::from("not byte [bp + 9905]")));
     }
 }
