@@ -48,6 +48,7 @@ enum OpcodeParseType
     InOut,
     AsciiAdjust,
     Repeat,
+    Return,
     Direct,
     Nop
 }
@@ -285,8 +286,8 @@ const OPCODE_TABLE: [OpcodeTableEntry; 256] =
         OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::ImmReg}, //0xBF
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xC0
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xC1
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xC2
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xC3
+        OpcodeTableEntry { mnemonic: "ret", opt: OpcodeParseType::Return}, //0xC2
+        OpcodeTableEntry { mnemonic: "ret", opt: OpcodeParseType::Return}, //0xC3
         OpcodeTableEntry { mnemonic: "les", opt: OpcodeParseType::RegRmWithDispD1W1}, //0xC4
         OpcodeTableEntry { mnemonic: "lds", opt: OpcodeParseType::RegRmWithDispD1}, //0xC5
         OpcodeTableEntry { mnemonic: "mov", opt: OpcodeParseType::ImmRm}, //0xC6
@@ -710,13 +711,13 @@ fn parse_rm_with_disp_instruction(opcode: OpcodeTableEntry, data: &[u8]) -> (usi
     use BitValue::*;
     use TwoBitValue::*;
     use ThreeBitValue::*;
-    let oc_mnmc = {
+    let (use_w_flag, oc_mnmc) = {
         match get_three_bit_value((data[1] & SUB_CODE_MASK) >> SUB_CODE_SHFT) {
             TBV000 => {
                 if data[0] == 0x8F {
-                    "pop"
+                    (true, "pop")
                 } else if (data[0] &  0xFE) == 0xFE {
-                    "inc"
+                    (true, "inc")
                 } else if (data[0] & 0xFE) == 0xF6 {
                     let mod_opcode: OpcodeTableEntry = OpcodeTableEntry {mnemonic: "test", opt: opcode.opt};
                     return parse_imm_rm_instruction(mod_opcode, data);
@@ -724,21 +725,23 @@ fn parse_rm_with_disp_instruction(opcode: OpcodeTableEntry, data: &[u8]) -> (usi
                     panic!("unknown opcode/subcode")
                 }
             },
-            TBV001 => "dec",
-            TBV010 => "not",
-            TBV011 => "neg",
-            TBV100 => "mul",
-            TBV101 => "imul",
+            TBV001 => (true, "dec"),
+            TBV010 => {
+                if data[0] == 0xFF { (false, "call") } else { (true, "not")}
+            },
+            TBV011 => (true, "neg"),
+            TBV100 => {if  data[0] == 0xFF {(false, "jmp")} else {(true, "mul")}},
+            TBV101 => (true, "imul"),
             TBV110 => {
                 if data[0] == 0xFF {
-                    "push"
+                    (true, "push")
                 } else if (data[0] & 0xFE) == 0xF6 {
-                    "div"
+                    (true, "div")
                 } else {
                     panic!("unknwon opcode/subcode")
                 }
             }
-            TBV111 => "idiv",
+            TBV111 => (true, "idiv"),
         }
     };
 
@@ -748,10 +751,14 @@ fn parse_rm_with_disp_instruction(opcode: OpcodeTableEntry, data: &[u8]) -> (usi
     match mod_code {
         DBV11 => (2 + t.0, String::from(format!("{} {}", oc_mnmc, t.1))),
         _ => {
-            let w_flag = get_bit_value((data[0] & W_MASK) >> W_SHFT);
-            match w_flag {
-                BV0 => (2 + t.0, String::from(format!("{} byte {}", oc_mnmc, t.1))),
-                BV1 => (2 + t.0, String::from(format!("{} word {}", oc_mnmc, t.1)))
+            if use_w_flag {
+                let w_flag = get_bit_value((data[0] & W_MASK) >> W_SHFT);
+                match w_flag {
+                    BV0 => (2 + t.0, String::from(format!("{} byte {}", oc_mnmc, t.1))),
+                    BV1 => (2 + t.0, String::from(format!("{} word {}", oc_mnmc, t.1)))
+                }
+            }else {
+                (2 + t.0, String::from(format!("{} {}", oc_mnmc, t.1)))
             }
 
         }
@@ -803,6 +810,15 @@ fn parse_repeat_instruction(opcode: OpcodeTableEntry, data: &[u8]) -> (usize, St
     (2, String::from(format!("{} {}{}", opcode.mnemonic, operand, w_char)))
 }
 
+fn parse_return_instruction(opcode: OpcodeTableEntry, data: &[u8]) -> (usize, String) {
+    use BitValue::*;
+    let oc_mnmc = opcode.mnemonic;
+    match get_bit_value(data[0] & 0x1) {
+        BV0 => (3, String::from(format!("{} {}", oc_mnmc, read_i16_val(&data[1..3])))),
+        BV1 => (1, String::from("ret"))
+    }
+}
+
 fn parse_direct_instruction(opcode: OpcodeTableEntry, _data: &[u8]) -> (usize, String) {
     (1, String::from(opcode.mnemonic))
 }
@@ -826,6 +842,7 @@ fn parse_instruction(data: &[u8]) -> (usize, String)
         OpcodeParseType::InOut => parse_inout_instruction(opcode, data),
         OpcodeParseType::AsciiAdjust => parse_ascii_adjust_instruction(opcode, data),
         OpcodeParseType::Repeat => parse_repeat_instruction(opcode, data),
+        OpcodeParseType::Return => parse_return_instruction(opcode, data),
         OpcodeParseType::Direct => parse_direct_instruction(opcode, data),
         OpcodeParseType::Nop => panic!("Invalid opcode 0x{:x}",data[0])
     }
@@ -2056,5 +2073,32 @@ mod test {
                    (2, String::from("repnz stosb")));
         assert_eq!(parse_instruction(&[0xf2, 0xab]),
                    (2, String::from("repnz stosw")));
+    }
+
+    #[test]
+    fn test_call_ret() {
+        assert_eq!(parse_instruction(&[0xff, 0x16, 0x21, 0x99]),
+                   (4, String::from("call [39201]")));
+        assert_eq!(parse_instruction(&[0xff, 0x56, 0x9c]),
+                   (3, String::from("call [bp - 100]")));
+        assert_eq!(parse_instruction(&[0xff, 0xd4]),
+                   (2, String::from("call sp")));
+        assert_eq!(parse_instruction(&[0xff, 0xd0]),
+                   (2, String::from("call ax")));
+        assert_eq!(parse_instruction(&[0xff, 0xe0]),
+                   (2, String::from("jmp ax")));
+        assert_eq!(parse_instruction(&[0xff, 0xe7]),
+                   (2, String::from("jmp di")));
+        assert_eq!(parse_instruction(&[0xff, 0x26, 0x0c, 0x00]),
+                   (4, String::from("jmp [12]")));
+        assert_eq!(parse_instruction(&[0xff, 0x26, 0x2b, 0x11]),
+                   (4, String::from("jmp [4395]")));
+        assert_eq!(parse_instruction(&[0xc2, 0xf9, 0xff]),
+                   (3, String::from("ret -7")));
+        assert_eq!(parse_instruction(&[0xc2, 0xf4, 0x01]),
+                   (3, String::from("ret 500")));
+        assert_eq!(parse_instruction(&[0xc3]),
+                   (1, String::from("ret")));
+
     }
 }
