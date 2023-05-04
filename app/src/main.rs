@@ -332,8 +332,8 @@ const OPCODE_TABLE: [OpcodeTableEntry; 256] =
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xF3
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xF4
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xF5
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xF6
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xF7
+        OpcodeTableEntry { mnemonic: "---", opt: OpcodeParseType::RmWithDisp}, //0xF6
+        OpcodeTableEntry { mnemonic: "---", opt: OpcodeParseType::RmWithDisp}, //0xF7
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xF8
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xF9
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xFA
@@ -667,6 +667,7 @@ fn parse_rm_with_disp_instruction(_opcode: OpcodeTableEntry, data: &[u8]) -> (us
                 }
             },
             TBV001 => "dec",
+            TBV011 => "neg",
             TBV110 => "push",
             _ => panic!("unknown subcode")
         }
