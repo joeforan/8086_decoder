@@ -110,12 +110,12 @@ const OPCODE_TABLE: [OpcodeTableEntry; 256] =
         OpcodeTableEntry { mnemonic: "adc", opt: OpcodeParseType::ImmAcc}, //0x15
         OpcodeTableEntry { mnemonic: "push", opt: OpcodeParseType::SingleByteWithSr}, //0x16
         OpcodeTableEntry { mnemonic: "pop", opt: OpcodeParseType::SingleByteWithSr}, //0x17
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x18
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x19
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x1A
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x1B
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x1C
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x1D
+        OpcodeTableEntry { mnemonic: "sbb", opt: OpcodeParseType::RegRmWithDisp}, //0x18
+        OpcodeTableEntry { mnemonic: "sbb", opt: OpcodeParseType::RegRmWithDisp}, //0x19
+        OpcodeTableEntry { mnemonic: "sbb", opt: OpcodeParseType::RegRmWithDisp}, //0x1A
+        OpcodeTableEntry { mnemonic: "sbb", opt: OpcodeParseType::RegRmWithDisp}, //0x1B
+        OpcodeTableEntry { mnemonic: "sbb", opt: OpcodeParseType::ImmAcc}, //0x1C
+        OpcodeTableEntry { mnemonic: "sbb", opt: OpcodeParseType::ImmAcc}, //0x1D
         OpcodeTableEntry { mnemonic: "push", opt: OpcodeParseType::SingleByteWithSr}, //0x1E
         OpcodeTableEntry { mnemonic: "pop", opt: OpcodeParseType::SingleByteWithSr}, //0x1F
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x20
@@ -515,9 +515,10 @@ fn parse_imm_rm_instruction(opcode: OpcodeTableEntry, data: &[u8]) -> (usize, St
         match sub_opcode {
             TBV000 => "add",
             TBV010 => "adc",
+            TBV011 => "sbb",
             TBV101 => "sub",
             TBV111 => "cmp",
-            _ => panic!("UNknown subopcode")
+            _ => panic!("Unknown subopcode")
         }
     } else {
         opcode.mnemonic
