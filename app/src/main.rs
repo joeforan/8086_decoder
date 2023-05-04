@@ -2138,4 +2138,11 @@ mod test {
         assert_eq!(parse_instruction(&[0xcd, 0x0d]),
                    (2, String::from("int 13")));
     }
+    #[test]
+    fn test_lock_instructions() {
+        assert_eq!(parse_instruction(&[0xf0, 0xf6, 0x96, 0xb1, 0x26]),
+                   (5, String::from("lock not byte [bp + 9905]")));
+        assert_eq!(parse_instruction(&[0xf0, 0x86, 0x06, 0x64, 0x00]),
+                   (5, String::from("lock xchg [100], al")));
+    }
 }
