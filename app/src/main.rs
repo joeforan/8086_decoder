@@ -1660,4 +1660,34 @@ mod test {
                    (3, String::from("dec byte [bp]")));
     }
 
+    #[test]
+    fn test_neg_instructions() {
+        assert_eq!(parse_instruction(&[0xf7, 0xd8]),
+                   (2, String::from("neg ax")));
+        assert_eq!(parse_instruction(&[0xf7, 0xd9]),
+                   (2, String::from("neg cx")));
+        assert_eq!(parse_instruction(&[0xf6, 0xde]),
+                   (2, String::from("neg dh")));
+        assert_eq!(parse_instruction(&[0xf6, 0xd8]),
+                   (2, String::from("neg al")));
+        assert_eq!(parse_instruction(&[0xf6, 0xdc]),
+                   (2, String::from("neg ah")));
+        assert_eq!(parse_instruction(&[0xf7, 0xdc]),
+                   (2, String::from("neg sp")));
+        assert_eq!(parse_instruction(&[0xf7, 0xdf]),
+                   (2, String::from("neg di")));
+        assert_eq!(parse_instruction(&[0xf6, 0x9e, 0xea, 0x03]),
+                   (4, String::from("neg byte [bp + 1002]")));
+        assert_eq!(parse_instruction(&[0xf7, 0x5f, 0x27]),
+                   (3, String::from("neg word [bx + 39]")));
+        assert_eq!(parse_instruction(&[0xf6, 0x58, 0x05]),
+                   (3, String::from("neg byte [bx + si + 5]")));
+        assert_eq!(parse_instruction(&[0xf7, 0x9b, 0xc4, 0xd8]),
+                   (4, String::from("neg word [bp + di - 10044]")));
+        assert_eq!(parse_instruction(&[0xf7, 0x1e, 0x85, 0x24,]),
+                   (4, String::from("neg word [9349]")));
+        assert_eq!(parse_instruction(&[0xf6, 0x5e, 0x00]),
+                   (3, String::from("neg byte [bp]")));
+    }
+
 }
