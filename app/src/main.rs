@@ -1778,4 +1778,64 @@ mod test {
         assert_eq!(parse_instruction(&[0xf6, 0x96, 0xb1, 0x26]),
                    (4, String::from("not byte [bp + 9905]")));
     }
+
+    #[test]
+    fn test_shift_rot_instructions() {
+        assert_eq!(parse_instruction(&[0xd0, 0xe4]),
+                   (2, String::from("shl ah, 1")));
+        assert_eq!(parse_instruction(&[0xd1, 0xe8]),
+                   (2, String::from("shr ax, 1")));
+        assert_eq!(parse_instruction(&[0xd1, 0xfb]),
+                   (2, String::from("sar bx, 1")));
+        assert_eq!(parse_instruction(&[0xd1, 0xc1]),
+                   (2, String::from("rol cx, 1")));
+        assert_eq!(parse_instruction(&[0xd0, 0xce]),
+                   (2, String::from("ror dh, 1")));
+        assert_eq!(parse_instruction(&[0xd1, 0xd4]),
+                   (2, String::from("rcl sp, 1")));
+        assert_eq!(parse_instruction(&[0xd1, 0xdd]),
+                   (2, String::from("rcr bp, 1")));
+        assert_eq!(parse_instruction(&[0xd1, 0x66, 0x05]),
+                   (3, String::from("shl word [bp + 5], 1")));
+        assert_eq!(parse_instruction(&[0xd0, 0xa8, 0x39, 0xff]),
+                   (4, String::from("shr byte [bx + si - 199], 1")));
+        assert_eq!(parse_instruction(&[0xd0, 0xb9, 0xd4, 0xfe]),
+                   (4, String::from("sar byte [bx + di - 300], 1")));
+        assert_eq!(parse_instruction(&[0xd1, 0x46, 0x00]),
+                   (3, String::from("rol word [bp], 1")));
+        assert_eq!(parse_instruction(&[0xd1, 0x0e, 0x4a, 0x13]),
+                   (4, String::from("ror word [4938], 1")));
+        assert_eq!(parse_instruction(&[0xd0, 0x16, 0x03, 0x00]),
+                   (4, String::from("rcl byte [3], 1")));
+        assert_eq!(parse_instruction(&[0xd1, 0x1f]),
+                   (2, String::from("rcr word [bx], 1")));
+        assert_eq!(parse_instruction(&[0xd2, 0xe4]),
+                   (2, String::from("shl ah, cl")));
+        assert_eq!(parse_instruction(&[0xd3, 0xe8]),
+                   (2, String::from("shr ax, cl")));
+        assert_eq!(parse_instruction(&[0xd3, 0xfb]),
+                   (2, String::from("sar bx, cl")));
+        assert_eq!(parse_instruction(&[0xd3, 0xc1]),
+                   (2, String::from("rol cx, cl")));
+        assert_eq!(parse_instruction(&[0xd2, 0xce]),
+                   (2, String::from("ror dh, cl")));
+        assert_eq!(parse_instruction(&[0xd3, 0xd4]),
+                   (2, String::from("rcl sp, cl")));
+        assert_eq!(parse_instruction(&[0xd3, 0xdd]),
+                   (2, String::from("rcr bp, cl")));
+        assert_eq!(parse_instruction(&[0xd3, 0x66, 0x05]),
+                   (3, String::from("shl word [bp + 5], cl")));
+        assert_eq!(parse_instruction(&[0xd3, 0xa8, 0x39, 0xff]),
+                   (4, String::from("shr word [bx + si - 199], cl")));
+        assert_eq!(parse_instruction(&[0xd2, 0xb9, 0xd4, 0xfe]),
+                   (4, String::from("sar byte [bx + di - 300], cl")));
+        assert_eq!(parse_instruction(&[0xd2, 0x46, 0x00]),
+                   (3, String::from("rol byte [bp], cl")));
+        assert_eq!(parse_instruction(&[0xd2, 0x0e, 0x4a, 0x13]),
+                   (4, String::from("ror byte [4938], cl")));
+        assert_eq!(parse_instruction(&[0xd2, 0x16, 0x03, 0x00]),
+                   (4, String::from("rcl byte [3], cl")));
+        assert_eq!(parse_instruction(&[0xd3, 0x1f]),
+                   (2, String::from("rcr word [bx], cl")));
+    }
 }
