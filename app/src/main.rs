@@ -1503,4 +1503,30 @@ mod test {
         assert_eq!(parse_instruction(&[0x00, 0xc5]),
                    (2, String::from("add ch, al")));
     }
+
+    #[test]
+    fn test_adc_instructions() {
+        assert_eq!(parse_instruction(&[0x13, 0x4e, 0x00]),
+                   (3, String::from("adc cx, [bp]")));
+        assert_eq!(parse_instruction(&[0x13, 0x10]),
+                   (2, String::from("adc dx, [bx + si]")));
+        assert_eq!(parse_instruction(&[0x10, 0xa3, 0x88, 0x13]),
+                   (4, String::from("adc [bp + di + 5000], ah")));
+        assert_eq!(parse_instruction(&[0x10, 0x07]),
+                   (2, String::from("adc [bx], al")));
+        assert_eq!(parse_instruction(&[0x81, 0xd4, 0x88, 0x01]),
+                   (4, String::from("adc sp, 392")));
+        assert_eq!(parse_instruction(&[0x83, 0xd6, 0x05]),
+                   (3, String::from("adc si, 5")));
+        assert_eq!(parse_instruction(&[0x15, 0xe8, 0x03]),
+                   (3, String::from("adc ax, 1000")));
+        assert_eq!(parse_instruction(&[0x80, 0xd4, 0x1e]),
+                   (3, String::from("adc ah, 30")));
+        assert_eq!(parse_instruction(&[0x14, 0x09]),
+                   (2, String::from("adc al, 9")));
+        assert_eq!(parse_instruction(&[0x11, 0xd9]),
+                   (2, String::from("adc cx, bx")));
+        assert_eq!(parse_instruction(&[0x10, 0xc5]),
+                   (2, String::from("adc ch, al")));
+    }
 }
