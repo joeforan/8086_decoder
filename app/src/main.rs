@@ -74,6 +74,10 @@ const IMMREG_SHFT: u8 = 0;
 const RM_MASK: u8 = 0x07;
 const RM_SHFT: u8 = 0;
 
+const SUB_CODE_MASK: u8 = REG_MASK;
+const SUB_CODE_SHFT: u8 = REG_SHFT;
+
+
 #[derive (Clone, Copy)]
 struct OpcodeTableEntry {
     mnemonic: &'static str,
@@ -146,14 +150,14 @@ const OPCODE_TABLE: [OpcodeTableEntry; 256] =
         OpcodeTableEntry { mnemonic: "cmp", opt: OpcodeParseType::ImmAcc}, //0x3D
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x3E
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x3F
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x40
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x41
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x42
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x43
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x44
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x45
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x46
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x47
+        OpcodeTableEntry { mnemonic: "inc ax", opt: OpcodeParseType::Direct}, //0x40
+        OpcodeTableEntry { mnemonic: "inc cx", opt: OpcodeParseType::Direct}, //0x41
+        OpcodeTableEntry { mnemonic: "inc dx", opt: OpcodeParseType::Direct}, //0x42
+        OpcodeTableEntry { mnemonic: "inc bx", opt: OpcodeParseType::Direct}, //0x43
+        OpcodeTableEntry { mnemonic: "inc sp", opt: OpcodeParseType::Direct}, //0x44
+        OpcodeTableEntry { mnemonic: "inc bp", opt: OpcodeParseType::Direct}, //0x45
+        OpcodeTableEntry { mnemonic: "inc si", opt: OpcodeParseType::Direct}, //0x46
+        OpcodeTableEntry { mnemonic: "inc di", opt: OpcodeParseType::Direct}, //0x47
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x48
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x49
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x4A
@@ -225,7 +229,7 @@ const OPCODE_TABLE: [OpcodeTableEntry; 256] =
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x8C
         OpcodeTableEntry { mnemonic: "lea", opt: OpcodeParseType::RegRmWithDispD1}, //0x8D
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x8E
-        OpcodeTableEntry { mnemonic: "pop", opt: OpcodeParseType::RmWithDisp}, //0x8F
+        OpcodeTableEntry { mnemonic: "---", opt: OpcodeParseType::RmWithDisp}, //0x8F
         OpcodeTableEntry { mnemonic: "xchg ax,", opt: OpcodeParseType::SingleByteWithReg}, //0x90
         OpcodeTableEntry { mnemonic: "xchg ax,", opt: OpcodeParseType::SingleByteWithReg}, //0x91
         OpcodeTableEntry { mnemonic: "xchg ax,", opt: OpcodeParseType::SingleByteWithReg}, //0x92
@@ -336,8 +340,8 @@ const OPCODE_TABLE: [OpcodeTableEntry; 256] =
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xFB
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xFC
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xFD
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xFE
-        OpcodeTableEntry { mnemonic: "push", opt: OpcodeParseType::RmWithDisp}, //0xFF
+        OpcodeTableEntry { mnemonic: "---", opt: OpcodeParseType::RmWithDisp}, //0xFE
+        OpcodeTableEntry { mnemonic: "---", opt: OpcodeParseType::RmWithDisp}, //0xFF
     ];
 
 
@@ -429,6 +433,7 @@ fn get_mem_ptr_and_displacement(data: &[u8],
     use TwoBitValue::*;
     use ThreeBitValue::*;
     let mut data_offset: usize = 0;
+
     let mut ret: String = "[".to_owned();
     if (mod_code == DBV00) && (rm_code == TBV110) {
         let disp = read_u16_val(&data[2..4]);
@@ -476,7 +481,10 @@ fn get_mem_ptr_and_displacement(data: &[u8],
                         String::from(format!(" - {}]", -data_val))
                     }
                 },
-                _ => unreachable!()
+                DBV11 => {
+                    let w_flag = get_bit_value((data[0] & W_MASK) >> W_SHFT);
+                    return (0, get_reg_str(w_flag, rm_code));
+                }
             };
         ret.push_str(&suffix);
         (data_offset, ret)
@@ -503,7 +511,7 @@ fn parse_imm_rm_instruction(opcode: OpcodeTableEntry, data: &[u8]) -> (usize, St
     use TwoBitValue::*;
     use ThreeBitValue::*;
     let oc_mnmnc = if (data[0] & 0xFC) == 0x80 {
-        let sub_opcode = get_three_bit_value((data[1] & 0x3C) >> 3);
+        let sub_opcode = get_three_bit_value((data[1] & SUB_CODE_MASK) >> SUB_CODE_SHFT);
         match sub_opcode {
             TBV000 => "add",
             TBV010 => "adc",
@@ -642,12 +650,41 @@ fn parse_jmp_instruction(opcode: OpcodeTableEntry, data: &[u8]) -> (usize, Strin
     (2, String::from(format!("{} {} {}", oc_mnmc, OFFSET_STR, jump_offset)))
 }
 
-fn parse_rm_with_disp_instruction(opcode: OpcodeTableEntry, data: &[u8]) -> (usize, String) {
-    let oc_mnmc = opcode.mnemonic;
+fn parse_rm_with_disp_instruction(_opcode: OpcodeTableEntry, data: &[u8]) -> (usize, String) {
+    use BitValue::*;
+    use TwoBitValue::*;
+    use ThreeBitValue::*;
+    let oc_mnmc = {
+        match get_three_bit_value((data[1] & SUB_CODE_MASK) >> SUB_CODE_SHFT) {
+            TBV000 => {
+                if data[0] == 0x8F {
+                    "pop"
+                } else if (data[0] &  0xFE) == 0xFE {
+                    "inc"
+                } else {
+                    panic!("unknown opcode/subcode")
+                }
+            },
+            TBV110 => "push",
+            _ => panic!("unknown subcode")
+        }
+    };
+
     let mod_code = get_two_bit_value((data[1] & MOD_MASK) >> MOD_SHFT);
     let rm_code = get_three_bit_value((data[1] & RM_MASK) >> RM_SHFT);
     let t = get_mem_ptr_and_displacement(data, rm_code, mod_code);
-    (2 + t.0, String::from(format!("{} word {}", oc_mnmc, t.1)))
+    match mod_code {
+        DBV11 => (2 + t.0, String::from(format!("{} {}", oc_mnmc, t.1))),
+        _ => {
+            let w_flag = get_bit_value((data[0] & W_MASK) >> W_SHFT);
+            match w_flag {
+                BV0 => (2 + t.0, String::from(format!("{} byte {}", oc_mnmc, t.1))),
+                BV1 => (2 + t.0, String::from(format!("{} word {}", oc_mnmc, t.1)))
+            }
+
+        }
+    }
+
 }
 
 fn parse_single_byte_instruction_with_sr(opcode: OpcodeTableEntry, data: &[u8]) -> (usize, String) {
