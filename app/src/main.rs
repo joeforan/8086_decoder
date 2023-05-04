@@ -668,7 +668,18 @@ fn parse_rm_with_disp_instruction(_opcode: OpcodeTableEntry, data: &[u8]) -> (us
             },
             TBV001 => "dec",
             TBV011 => "neg",
-            TBV110 => "push",
+            TBV100 => "mul",
+            TBV101 => "imul",
+            TBV110 => {
+                if data[0] == 0xFF {
+                    "push"
+                } else if (data[0] & 0xFE) == 0xF6 {
+                    "div"
+                } else {
+                    panic!("unknwon opcode/subcode")
+                }
+            }
+            TBV111 => "idiv",
             _ => panic!("unknown subcode")
         }
     };
