@@ -158,14 +158,14 @@ const OPCODE_TABLE: [OpcodeTableEntry; 256] =
         OpcodeTableEntry { mnemonic: "inc bp", opt: OpcodeParseType::Direct}, //0x45
         OpcodeTableEntry { mnemonic: "inc si", opt: OpcodeParseType::Direct}, //0x46
         OpcodeTableEntry { mnemonic: "inc di", opt: OpcodeParseType::Direct}, //0x47
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x48
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x49
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x4A
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x4B
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x4C
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x4D
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x4E
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x4F
+        OpcodeTableEntry { mnemonic: "dec ax", opt: OpcodeParseType::Direct}, //0x48
+        OpcodeTableEntry { mnemonic: "dec cx", opt: OpcodeParseType::Direct}, //0x49
+        OpcodeTableEntry { mnemonic: "dec dx", opt: OpcodeParseType::Direct}, //0x4A
+        OpcodeTableEntry { mnemonic: "dec bx", opt: OpcodeParseType::Direct}, //0x4B
+        OpcodeTableEntry { mnemonic: "dec sp", opt: OpcodeParseType::Direct}, //0x4C
+        OpcodeTableEntry { mnemonic: "dec bp", opt: OpcodeParseType::Direct}, //0x4D
+        OpcodeTableEntry { mnemonic: "dec si", opt: OpcodeParseType::Direct}, //0x4E
+        OpcodeTableEntry { mnemonic: "dec di", opt: OpcodeParseType::Direct}, //0x4F
         OpcodeTableEntry { mnemonic: "push", opt: OpcodeParseType::SingleByteWithReg}, //0x50
         OpcodeTableEntry { mnemonic: "push", opt: OpcodeParseType::SingleByteWithReg}, //0x51
         OpcodeTableEntry { mnemonic: "push", opt: OpcodeParseType::SingleByteWithReg}, //0x52
@@ -666,6 +666,7 @@ fn parse_rm_with_disp_instruction(_opcode: OpcodeTableEntry, data: &[u8]) -> (us
                     panic!("unknown opcode/subcode")
                 }
             },
+            TBV001 => "dec",
             TBV110 => "push",
             _ => panic!("unknown subcode")
         }
@@ -1627,6 +1628,36 @@ mod test {
                    (2, String::from("sbb cx, bx")));
         assert_eq!(parse_instruction(&[0x18, 0xc5]),
                    (2, String::from("sbb ch, al")));
+    }
+
+    #[test]
+    fn test_dec_instructions() {
+        assert_eq!(parse_instruction(&[0x48]),
+                   (1, String::from("dec ax")));
+        assert_eq!(parse_instruction(&[0x49]),
+                   (1, String::from("dec cx")));
+        assert_eq!(parse_instruction(&[0xfe, 0xce]),
+                   (2, String::from("dec dh")));
+        assert_eq!(parse_instruction(&[0xfe, 0xc8]),
+                   (2, String::from("dec al")));
+        assert_eq!(parse_instruction(&[0xfe, 0xcc]),
+                   (2, String::from("dec ah")));
+        assert_eq!(parse_instruction(&[0x4c]),
+                   (1, String::from("dec sp")));
+        assert_eq!(parse_instruction(&[0x4f]),
+                   (1, String::from("dec di")));
+        assert_eq!(parse_instruction(&[0xfe, 0x8e, 0xea, 0x03]),
+                   (4, String::from("dec byte [bp + 1002]")));
+        assert_eq!(parse_instruction(&[0xff, 0x4f, 0x27]),
+                   (3, String::from("dec word [bx + 39]")));
+        assert_eq!(parse_instruction(&[0xfe, 0x48, 0x05]),
+                   (3, String::from("dec byte [bx + si + 5]")));
+        assert_eq!(parse_instruction(&[0xff, 0x8b, 0xc4, 0xd8]),
+                   (4, String::from("dec word [bp + di - 10044]")));
+        assert_eq!(parse_instruction(&[0xff, 0x0e, 0x85, 0x24]),
+                   (4, String::from("dec word [9349]")));
+        assert_eq!(parse_instruction(&[0xfe, 0x4e, 0x00]),
+                   (3, String::from("dec byte [bp]")));
     }
 
 }
