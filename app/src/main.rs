@@ -333,7 +333,7 @@ const OPCODE_TABLE: [OpcodeTableEntry; 256] =
         OpcodeTableEntry { mnemonic: "out dx, ax", opt: OpcodeParseType::Direct}, //0xEF
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xF0
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xF1
-        OpcodeTableEntry { mnemonic: "rep", opt: OpcodeParseType::Repeat}, //0xF2
+        OpcodeTableEntry { mnemonic: "repnz", opt: OpcodeParseType::Repeat}, //0xF2
         OpcodeTableEntry { mnemonic: "rep", opt: OpcodeParseType::Repeat}, //0xF3
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xF4
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xF5
@@ -789,7 +789,7 @@ fn parse_ascii_adjust_instruction(opcode: OpcodeTableEntry, data: &[u8]) -> (usi
     (2, String::from(format!("{}", opcode.mnemonic)))
 }
 
-fn parse_repeat_instruction(_opcode: OpcodeTableEntry, data: &[u8]) -> (usize, String) {
+fn parse_repeat_instruction(opcode: OpcodeTableEntry, data: &[u8]) -> (usize, String) {
     use BitValue::*;
     let w_char = match get_bit_value((data[1] & W_MASK) >> W_SHFT) { BV0 => 'b', BV1 => 'w' };
     let operand = match data[1] & 0xFE {
@@ -800,7 +800,7 @@ fn parse_repeat_instruction(_opcode: OpcodeTableEntry, data: &[u8]) -> (usize, S
         0xAA => "stos",
         _ => panic!("Unknown operand for repeat instruction")
     };
-    (2, String::from(format!("rep {}{}", operand, w_char)))
+    (2, String::from(format!("{} {}{}", opcode.mnemonic, operand, w_char)))
 }
 
 fn parse_direct_instruction(opcode: OpcodeTableEntry, _data: &[u8]) -> (usize, String) {
@@ -2036,5 +2036,25 @@ mod test {
                    (2, String::from("rep stosb")));
         assert_eq!(parse_instruction(&[0xf3, 0xab]),
                    (2, String::from("rep stosw")));
+        assert_eq!(parse_instruction(&[0xf2, 0xa4]),
+                   (2, String::from("repnz movsb")));
+        assert_eq!(parse_instruction(&[0xf2, 0xa6]),
+                   (2, String::from("repnz cmpsb")));
+        assert_eq!(parse_instruction(&[0xf2, 0xae]),
+                   (2, String::from("repnz scasb")));
+        assert_eq!(parse_instruction(&[0xf2, 0xac]),
+                   (2, String::from("repnz lodsb")));
+        assert_eq!(parse_instruction(&[0xf2, 0xa5]),
+                   (2, String::from("repnz movsw")));
+        assert_eq!(parse_instruction(&[0xf2, 0xa7]),
+                   (2, String::from("repnz cmpsw")));
+        assert_eq!(parse_instruction(&[0xf2, 0xaf]),
+                   (2, String::from("repnz scasw")));
+        assert_eq!(parse_instruction(&[0xf2, 0xad]),
+                   (2, String::from("repnz lodsw")));
+        assert_eq!(parse_instruction(&[0xf2, 0xaa]),
+                   (2, String::from("repnz stosb")));
+        assert_eq!(parse_instruction(&[0xf2, 0xab]),
+                   (2, String::from("repnz stosw")));
     }
 }
