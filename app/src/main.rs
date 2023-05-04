@@ -47,6 +47,7 @@ enum OpcodeParseType
     SingleByteWithSr,
     InOut,
     AsciiAdjust,
+    Repeat,
     Direct,
     Nop
 }
@@ -332,8 +333,8 @@ const OPCODE_TABLE: [OpcodeTableEntry; 256] =
         OpcodeTableEntry { mnemonic: "out dx, ax", opt: OpcodeParseType::Direct}, //0xEF
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xF0
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xF1
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xF2
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xF3
+        OpcodeTableEntry { mnemonic: "rep", opt: OpcodeParseType::Repeat}, //0xF2
+        OpcodeTableEntry { mnemonic: "rep", opt: OpcodeParseType::Repeat}, //0xF3
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xF4
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0xF5
         OpcodeTableEntry { mnemonic: "---", opt: OpcodeParseType::RmWithDisp}, //0xF6
@@ -788,6 +789,20 @@ fn parse_ascii_adjust_instruction(opcode: OpcodeTableEntry, data: &[u8]) -> (usi
     (2, String::from(format!("{}", opcode.mnemonic)))
 }
 
+fn parse_repeat_instruction(_opcode: OpcodeTableEntry, data: &[u8]) -> (usize, String) {
+    use BitValue::*;
+    let w_char = match get_bit_value((data[1] & W_MASK) >> W_SHFT) { BV0 => 'b', BV1 => 'w' };
+    let operand = match data[1] & 0xFE {
+        0xA4 => "movs",
+        0xA6 => "cmps",
+        0xAE => "scas",
+        0xAC => "lods",
+        0xAA => "stos",
+        _ => panic!("Unknown operand for repeat instruction")
+    };
+    (2, String::from(format!("rep {}{}", operand, w_char)))
+}
+
 fn parse_direct_instruction(opcode: OpcodeTableEntry, _data: &[u8]) -> (usize, String) {
     (1, String::from(opcode.mnemonic))
 }
@@ -810,6 +825,7 @@ fn parse_instruction(data: &[u8]) -> (usize, String)
         OpcodeParseType::SingleByteWithReg => parse_single_byte_instruction_with_reg(opcode, data),
         OpcodeParseType::InOut => parse_inout_instruction(opcode, data),
         OpcodeParseType::AsciiAdjust => parse_ascii_adjust_instruction(opcode, data),
+        OpcodeParseType::Repeat => parse_repeat_instruction(opcode, data),
         OpcodeParseType::Direct => parse_direct_instruction(opcode, data),
         OpcodeParseType::Nop => panic!("Invalid opcode 0x{:x}",data[0])
     }
@@ -1996,6 +2012,29 @@ mod test {
                    (4, String::from("xor byte [bp - 39], 239")));
         assert_eq!(parse_instruction(&[0x81, 0xb0, 0x14, 0xef, 0x58, 0x28]),
                    (6, String::from("xor word [bx + si - 4332], 10328")));
+    }
 
+    #[test]
+    fn test_rep_instructions() {
+        assert_eq!(parse_instruction(&[0xf3, 0xa4]),
+                   (2, String::from("rep movsb")));
+        assert_eq!(parse_instruction(&[0xf3, 0xa6]),
+                   (2, String::from("rep cmpsb")));
+        assert_eq!(parse_instruction(&[0xf3, 0xae]),
+                   (2, String::from("rep scasb")));
+        assert_eq!(parse_instruction(&[0xf3, 0xac]),
+                   (2, String::from("rep lodsb")));
+        assert_eq!(parse_instruction(&[0xf3, 0xa5]),
+                   (2, String::from("rep movsw")));
+        assert_eq!(parse_instruction(&[0xf3, 0xa7]),
+                   (2, String::from("rep cmpsw")));
+        assert_eq!(parse_instruction(&[0xf3, 0xaf]),
+                   (2, String::from("rep scasw")));
+        assert_eq!(parse_instruction(&[0xf3, 0xad]),
+                   (2, String::from("rep lodsw")));
+        assert_eq!(parse_instruction(&[0xf3, 0xaa]),
+                   (2, String::from("rep stosb")));
+        assert_eq!(parse_instruction(&[0xf3, 0xab]),
+                   (2, String::from("rep stosw")));
     }
 }
