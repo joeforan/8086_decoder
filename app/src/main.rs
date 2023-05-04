@@ -133,7 +133,7 @@ const OPCODE_TABLE: [OpcodeTableEntry; 256] =
         OpcodeTableEntry { mnemonic: "sub", opt: OpcodeParseType::ImmAcc}, //0x2C
         OpcodeTableEntry { mnemonic: "sub", opt: OpcodeParseType::ImmAcc}, //0x2D
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x2E
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x2F
+        OpcodeTableEntry { mnemonic: "das", opt: OpcodeParseType::Direct}, //0x2F
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x30
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x31
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x32
@@ -149,7 +149,7 @@ const OPCODE_TABLE: [OpcodeTableEntry; 256] =
         OpcodeTableEntry { mnemonic: "cmp", opt: OpcodeParseType::ImmAcc}, //0x3C
         OpcodeTableEntry { mnemonic: "cmp", opt: OpcodeParseType::ImmAcc}, //0x3D
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x3E
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x3F
+        OpcodeTableEntry { mnemonic: "aas", opt: OpcodeParseType::Direct}, //0x3F
         OpcodeTableEntry { mnemonic: "inc ax", opt: OpcodeParseType::Direct}, //0x40
         OpcodeTableEntry { mnemonic: "inc cx", opt: OpcodeParseType::Direct}, //0x41
         OpcodeTableEntry { mnemonic: "inc dx", opt: OpcodeParseType::Direct}, //0x42
