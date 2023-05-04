@@ -1530,4 +1530,34 @@ mod test {
         assert_eq!(parse_instruction(&[0x10, 0xc5]),
                    (2, String::from("adc ch, al")));
     }
+
+    #[test]
+    fn test_inc_instructions() {
+        assert_eq!(parse_instruction(&[0x40]),
+                   (1, String::from("inc ax")));
+        assert_eq!(parse_instruction(&[0x41]),
+                   (1, String::from("inc cx")));
+        assert_eq!(parse_instruction(&[0xfe, 0xc6]),
+                   (2, String::from("inc dh")));
+        assert_eq!(parse_instruction(&[0xfe, 0xc0]),
+                   (2, String::from("inc al")));
+        assert_eq!(parse_instruction(&[0xfe, 0xc4]),
+                   (2, String::from("inc ah")));
+        assert_eq!(parse_instruction(&[0x44]),
+                   (1, String::from("inc sp")));
+        assert_eq!(parse_instruction(&[0x47]),
+                   (1, String::from("inc di")));
+        assert_eq!(parse_instruction(&[0xfe, 0x86, 0xea, 0x03]),
+                   (4, String::from("inc byte [bp + 1002]")));
+        assert_eq!(parse_instruction(&[0xff, 0x47,  0x27]),
+                   (3, String::from("inc word [bx + 39]")));
+        assert_eq!(parse_instruction(&[0xfe, 0x40, 0x05]),
+                   (3, String::from("inc byte [bx + si + 5]")));
+        assert_eq!(parse_instruction(&[0xff, 0x83, 0xc4, 0xd8]),
+                   (4, String::from("inc word [bp + di - 10044]")));
+        assert_eq!(parse_instruction(&[0xff, 0x06, 0x85, 0x24]),
+                   (4, String::from("inc word [9349]")));
+        assert_eq!(parse_instruction(&[0xfe, 0x46, 0x00]),
+                   (3, String::from("inc byte [bp]")));
+    }
 }
