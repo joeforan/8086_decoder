@@ -1601,4 +1601,31 @@ mod test {
         assert_eq!(parse_instruction(&[0xfe, 0x46, 0x00]),
                    (3, String::from("inc byte [bp]")));
     }
+
+    #[test]
+    fn test_sbb_instructions() {
+        assert_eq!(parse_instruction(&[0x1b, 0x4e, 0x00]),
+                   (3, String::from("sbb cx, [bp]")));
+        assert_eq!(parse_instruction(&[0x1b, 0x10]),
+                   (2, String::from("sbb dx, [bx + si]")));
+        assert_eq!(parse_instruction(&[0x18, 0xa3, 0x88, 0x13]),
+                   (4, String::from("sbb [bp + di + 5000], ah")));
+        assert_eq!(parse_instruction(&[0x18, 0x07]),
+                   (2, String::from("sbb [bx], al")));
+        assert_eq!(parse_instruction(&[0x81, 0xdc, 0x88, 0x01]),
+                   (4, String::from("sbb sp, 392")));
+        assert_eq!(parse_instruction(&[0x83, 0xde, 0x05]),
+                   (3, String::from("sbb si, 5")));
+        assert_eq!(parse_instruction(&[0x1d, 0xe8, 0x03]),
+                   (3, String::from("sbb ax, 1000")));
+        assert_eq!(parse_instruction(&[0x80, 0xdc, 0x1e]),
+                   (3, String::from("sbb ah, 30")));
+        assert_eq!(parse_instruction(&[0x1c, 0x09]),
+                   (2, String::from("sbb al, 9")));
+        assert_eq!(parse_instruction(&[0x19, 0xd9]),
+                   (2, String::from("sbb cx, bx")));
+        assert_eq!(parse_instruction(&[0x18, 0xc5]),
+                   (2, String::from("sbb ch, al")));
+    }
+
 }
