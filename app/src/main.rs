@@ -125,7 +125,7 @@ const OPCODE_TABLE: [OpcodeTableEntry; 256] =
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x24
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x25
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x26
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x27
+        OpcodeTableEntry { mnemonic: "daa", opt: OpcodeParseType::Direct}, //0x27
         OpcodeTableEntry { mnemonic: "sub", opt: OpcodeParseType::RegRmWithDisp}, //0x28
         OpcodeTableEntry { mnemonic: "sub", opt: OpcodeParseType::RegRmWithDisp}, //0x29
         OpcodeTableEntry { mnemonic: "sub", opt: OpcodeParseType::RegRmWithDisp}, //0x2A
@@ -141,7 +141,7 @@ const OPCODE_TABLE: [OpcodeTableEntry; 256] =
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x34
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x35
         OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x36
-        OpcodeTableEntry { mnemonic: "", opt: OpcodeParseType::Nop}, //0x37
+        OpcodeTableEntry { mnemonic: "aaa", opt: OpcodeParseType::Direct}, //0x37
         OpcodeTableEntry { mnemonic: "cmp", opt: OpcodeParseType::RegRmWithDisp}, //0x38
         OpcodeTableEntry { mnemonic: "cmp", opt: OpcodeParseType::RegRmWithDisp}, //0x39
         OpcodeTableEntry { mnemonic: "cmp", opt: OpcodeParseType::RegRmWithDisp}, //0x3A
