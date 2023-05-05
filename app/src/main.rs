@@ -160,6 +160,19 @@ enum Reg {
     Di
 }
 
+#[derive (PartialEq, Copy, Clone)]
+enum AdrReg {
+    BxSi,
+    BxDi,
+    BpSi,
+    BpDi,
+    Si,
+    Di,
+    Bp,
+    Bx,
+    DirAdr
+}
+
 fn cmd_as_str(cmd: Command) -> &'static str {
     use Command::*;
     match cmd {
@@ -270,11 +283,29 @@ fn reg_as_str(r: Reg) -> &'static str
     }
 }
 
+fn adr_reg_to_str(r: AdrReg) -> &'static str
+{
+    use AdrReg::*;
+    match r {
+        BxSi => "bx + si",
+        BxDi => "bx + di",
+        BpSi => "bp + si",
+        BpDi => "bp + di",
+        Si => "si",
+        Di => "di",
+        Bp => "bp",
+        Bx => "bx",
+        Direct => ""
+    }
+}
+
+
 #[derive (Copy, Clone)]
 enum Operand{
     Reg(Reg),
     ImmI8(i8),
     ImmI16(i16),
+    Ptr((AdrReg, i16))
 }
 
 struct Instruction
@@ -290,7 +321,23 @@ fn operand_to_str(operand: Operand) -> String
     match operand {
         Reg(r) => String::from(reg_as_str(r)),
         ImmI8(v) => String::from(format!("{}", v)),
-        ImmI16(v) => String::from(format!("{}", v))
+        ImmI16(v) => String::from(format!("{}", v)),
+        Ptr((ar, d)) => {
+            let rstr = adr_reg_to_str(ar);
+            if d == 0 {
+                String::from(format!("[{}]", rstr))
+            } else {
+                if ar == AdrReg::DirAdr {
+                    String::from(format!("[{}]", d))
+                } else {
+                    if d > 0 {
+                        String::from(format!("[{} + {}]", rstr, d))
+                    } else {
+                        String::from(format!("[{} - {}]", rstr, -d))
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1218,6 +1265,14 @@ mod test {
                                         Operand::ImmI8(12),
                                         Operand::Reg(Reg::Si)).to_str(),
                    "mov si, 12");
+        assert_eq!(Instruction::src_dst(Command::Mov,
+                                        Operand::ImmI16(-3948),
+                                        Operand::Reg(Reg::Dx)).to_str(),
+                   "mov dx, -3948");
+        assert_eq!(Instruction::src_dst(Command::Mov,
+                                        Operand::Ptr((AdrReg::BxSi, 0)),
+                                        Operand::Reg(Reg::Al)).to_str(),
+                   "mov al, [bx + si]");
     }
 
     #[test]
