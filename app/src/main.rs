@@ -55,6 +55,273 @@ enum OpcodeParseType
     Nop
 }
 
+#[derive (Clone, Copy)]
+enum Command {
+    Mov,
+    Add,
+    Adc,
+    Sub,
+    Sbb,
+    Cmp,
+    Inc,
+    Dec,
+    Neg,
+    And,
+    Or,
+    Not,
+    Xor,
+    Test,
+    Mul,
+    Imul,
+    Div,
+    IDiv,
+    Shl,
+    Shr,
+    Sar,
+    Rol,
+    Ror,
+    Rcl,
+    Rcr,
+    Push,
+    Pop,
+    Call,
+    Jmp,
+    Ret,
+    Retnz,
+    Je,
+    Jl,
+    Jle,
+    Jb,
+    Jbe,
+    Jp,
+    Jo,
+    Js,
+    Jne,
+    Jnl,
+    Jg,
+    Jnb,
+    Ja,
+    Jnp,
+    Jno,
+    Jns,
+    Loop,
+    Loopz,
+    Loopnz,
+    Jcxz,
+    Int,
+    Int3,
+    Xchg,
+    Rep,
+    In,
+    Out,
+    Xlat,
+    Lea,
+    Lds,
+    Les,
+    Lahf,
+    Sahf,
+    Pushf,
+    Popf,
+    Aaa,
+    Daa,
+    Aad,
+    Cbw,
+    Cwd,
+    Clc,
+    Cmc,
+    Stc,
+    Cld,
+    Std,
+    Cli,
+    Sti,
+    Hlt,
+    Wait,
+    Lock,
+    Retf
+}
+
+#[derive (Clone, Copy)]
+enum Reg {
+    Al,
+    Ah,
+    Ax,
+    Bl,
+    Bh,
+    Bx,
+    Cl,
+    Ch,
+    Cx,
+    Dl,
+    Dh,
+    Dx,
+    Sp,
+    Bp,
+    Si,
+    Di
+}
+
+fn cmd_as_str(cmd: Command) -> &'static str {
+    use Command::*;
+    match cmd {
+        Mov => "mov",
+        Add => "add",
+        Adc => "adc",
+        Sub => "sub",
+        Sbb => "sbb",
+        Cmp => "cmp",
+        Inc => "inc",
+        Dec => "dec",
+        Neg => "neg",
+        And => "and",
+        Or => "or",
+        Not => "not",
+        Xor => "xor",
+        Test => "test",
+        Mul => "mul",
+        Imul => "imul",
+        Div => "div",
+        IDiv => "idiv",
+        Shl => "shl",
+        Shr => "shr",
+        Sar => "sar",
+        Rol => "rol",
+        Ror => "ror",
+        Rcl => "rcl",
+        Rcr => "rcr",
+        Push => "push",
+        Pop => "pop",
+        Call => "call",
+        Jmp => "jmp",
+        Ret => "ret",
+        Retnz => "retnz",
+        Je => "je",
+        Jl => "jl",
+        Jle => "jle",
+        Jb => "jb",
+        Jbe => "jbe",
+        Jp => "jp",
+        Jo => "jo",
+        Js => "js",
+        Jne => "jne",
+        Jnl => "jnl",
+        Jg => "jg",
+        Jnb => "jnb",
+        Ja => "ja",
+        Jnp => "jnp",
+        Jno => "jno",
+        Jns => "jns",
+        Loop => "loop",
+        Loopz => "loopz",
+        Loopnz => "loopnz",
+        Jcxz => "jcxz",
+        Int => "int",
+        Int3 => "int3",
+        Xchg => "xchg",
+        Rep => "rep",
+        In => "in",
+        Out => "out",
+        Xlat => "xlat",
+        Lea => "lea",
+        Lds => "lds",
+        Les => "les",
+        Lahf => "lahf",
+        Sahf => "sahf",
+        Pushf => "pushf",
+        Popf => "popf",
+        Aaa => "aaa",
+        Daa => "daa",
+        Aad => "aad",
+        Cbw => "cbw",
+        Cwd => "cwd",
+        Clc => "clc",
+        Cmc => "cmc",
+        Stc => "stc",
+        Cld => "cld",
+        Std => "std",
+        Cli => "cli",
+        Sti => "sti",
+        Hlt => "hlt",
+        Wait => "wait",
+        Lock => "lock",
+        Retf => "retf"
+    }
+}
+
+fn reg_as_str(r: Reg) -> &'static str
+{
+    use Reg::*;
+    match r {
+        Al => "al",
+        Ah => "ah",
+        Ax => "ax",
+        Bl => "bl",
+        Bh => "bh",
+        Bx => "bx",
+        Cl => "cl",
+        Ch => "ch",
+        Cx => "cx",
+        Dl => "dl",
+        Dh => "dh",
+        Dx => "dx",
+        Sp => "sp",
+        Bp => "bp",
+        Si => "si",
+        Di => "di",
+    }
+}
+
+struct Operand {
+    base: Reg,
+    offset: Option<Reg>,
+    disp: Option<i16>,
+    is_ptr: bool,
+    imm: Option<i16>
+}
+
+impl Operand {
+    fn from_reg(r: Reg) -> Self {
+        Operand {
+            base: r,
+            offset: None,
+            disp: None,
+            is_ptr: false,
+            imm: None
+        }
+    }
+
+    fn to_str(&self) -> String {
+        String::from(reg_as_str(self.base))
+    }
+}
+
+
+struct Instruction
+{
+    cmd: Command,
+    op1: Option<Operand>,
+    op2: Option<Operand>,
+}
+
+impl Instruction {
+    fn src_dst(cmd: Command,
+                src: Operand,
+                dst: Operand) -> Self
+    {
+        Instruction {
+            cmd: cmd,
+            op1: Some(dst),
+            op2: Some(src)
+        }
+    }
+
+    fn to_str(&self) -> String {
+        String::from(format!("{} {}, {}",
+                             cmd_as_str(self.cmd),
+                             self.op1.as_ref().unwrap().to_str(),
+                             self.op2.as_ref().unwrap().to_str()))
+    }
+}
+
 const D_MASK: u8 = 0x02;
 const D_SHFT: u8 = 1;
 
@@ -940,6 +1207,14 @@ fn main() {
 #[cfg(test)]
 mod test {
     use super::*;
+
+    #[test]
+    fn test_instruction_to_str() {
+        assert_eq!(Instruction::src_dst(Command::Mov,
+                                        Operand::from_reg(Reg::Bx),
+                                        Operand::from_reg(Reg::Cx)).to_str(),
+                   "mov cx, bx");
+    }
 
     #[test]
     fn test_parse_instruction() {
