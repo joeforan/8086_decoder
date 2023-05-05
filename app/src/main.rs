@@ -1290,6 +1290,18 @@ mod test {
                                         Operand::Ptr((AdrReg::BxSi, 4999)),
                                         Operand::Reg(Reg::Al)).to_str(),
                    "mov al, [bx + si + 4999]");
+        assert_eq!(Instruction::src_dst(Command::Mov,
+                                        Operand::Ptr((AdrReg::BxDi, -37)),
+                                        Operand::Reg(Reg::Ax)).to_str(),
+                   "mov ax, [bx + di - 37]");
+        assert_eq!(Instruction::src_dst(Command::Mov,
+                                        Operand::Reg(Reg::Cl),
+                                        Operand::Ptr((AdrReg::BpSi, 0))).to_str(),
+                   "mov [bp + si], cl");
+       assert_eq!(Instruction::src_dst(Command::Mov,
+                                        Operand::Ptr((AdrReg::DirAdr, 3458)),
+                                        Operand::Reg(Reg::Bx)).to_str(),
+                   "mov bx, [3458]");
     }
 
     #[test]
