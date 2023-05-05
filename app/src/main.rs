@@ -1214,10 +1214,10 @@ mod test {
                                         Operand::Reg(Reg::Bx),
                                         Operand::Reg(Reg::Cx)).to_str(),
                    "mov cx, bx");
-        // assert_eq!(Instruction::src_dst(Command::Mov,
-        //                                 Operand::from_reg(Reg::Si),
-        //                                 Operand::from_i8imm(12)).to_str(),
-        //            "mov si, 12");
+        assert_eq!(Instruction::src_dst(Command::Mov,
+                                        Operand::ImmI8(12),
+                                        Operand::Reg(Reg::Si)).to_str(),
+                   "mov si, 12");
     }
 
     #[test]
