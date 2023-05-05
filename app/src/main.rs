@@ -308,7 +308,9 @@ enum Operand{
     Reg(Reg),
     ImmI8(i8),
     ImmI16(i16),
-    Ptr((AdrReg, i16))
+    Ptr((AdrReg, i16)),
+    Offset(i8)
+
 }
 
 impl Operand {
@@ -334,6 +336,9 @@ impl Operand {
                         }
                     }
                 }
+            },
+            Offset(offset) => {
+                String::from(format!("{} {}", OFFSET_STR, offset))
             }
         }
     }
@@ -355,6 +360,16 @@ impl Instruction {
             cmd: cmd,
             op1: Some(dst),
             op2: Some(src)
+        }
+    }
+
+    fn jump(cmd: Command,
+            offset: i8) -> Self
+    {
+        Instruction {
+            cmd: cmd,
+            op1: Some(Operand::Offset(offset)),
+            op2: None
         }
     }
 
@@ -1302,9 +1317,9 @@ mod test {
                                         Operand::Ptr((AdrReg::DirAdr, 3458)),
                                         Operand::Reg(Reg::Bx)).to_str(),
                   "mov bx, [3458]");
-        assert_eq!(Instruction::jmp(Command::Jne,
+        assert_eq!(Instruction::jump(Command::Jne,
                                     -2).to_str(),
-                   format!("jnz {} -2", OFFSET_STR));
+                   format!("jne {} -2", OFFSET_STR));
     }
 
     #[test]
