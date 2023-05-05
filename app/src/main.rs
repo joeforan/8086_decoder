@@ -270,36 +270,28 @@ fn reg_as_str(r: Reg) -> &'static str
     }
 }
 
-struct Operand {
-    base: Reg,
-    offset: Option<Reg>,
-    disp: Option<i16>,
-    is_ptr: bool,
-    imm: Option<i16>
+#[derive (Copy, Clone)]
+enum Operand{
+    Reg(Reg),
+    ImmI8(i8),
+    ImmI16(i16),
 }
-
-impl Operand {
-    fn from_reg(r: Reg) -> Self {
-        Operand {
-            base: r,
-            offset: None,
-            disp: None,
-            is_ptr: false,
-            imm: None
-        }
-    }
-
-    fn to_str(&self) -> String {
-        String::from(reg_as_str(self.base))
-    }
-}
-
 
 struct Instruction
 {
     cmd: Command,
     op1: Option<Operand>,
     op2: Option<Operand>,
+}
+
+fn operand_to_str(operand: Operand) -> String
+{
+    use Operand::*;
+    match operand {
+        Reg(r) => String::from(reg_as_str(r)),
+        ImmI8(v) => String::from(format!("{}", v)),
+        ImmI16(v) => String::from(format!("{}", v))
+    }
 }
 
 impl Instruction {
@@ -315,10 +307,18 @@ impl Instruction {
     }
 
     fn to_str(&self) -> String {
-        String::from(format!("{} {}, {}",
-                             cmd_as_str(self.cmd),
-                             self.op1.as_ref().unwrap().to_str(),
-                             self.op2.as_ref().unwrap().to_str()))
+        let mut ret = String::from(cmd_as_str(self.cmd));
+        match self.op1 {
+            Some(o) => {
+                ret.push_str(&String::from(format!(" {}", operand_to_str(o))));
+                match self.op2 {
+                    Some(o2) => { ret.push_str(&String::from(format!(", {}", operand_to_str(o2))));},
+                    None => {;}
+                };
+            },
+            None => {;}
+        };
+        ret
     }
 }
 
@@ -1211,9 +1211,13 @@ mod test {
     #[test]
     fn test_instruction_to_str() {
         assert_eq!(Instruction::src_dst(Command::Mov,
-                                        Operand::from_reg(Reg::Bx),
-                                        Operand::from_reg(Reg::Cx)).to_str(),
+                                        Operand::Reg(Reg::Bx),
+                                        Operand::Reg(Reg::Cx)).to_str(),
                    "mov cx, bx");
+        // assert_eq!(Instruction::src_dst(Command::Mov,
+        //                                 Operand::from_reg(Reg::Si),
+        //                                 Operand::from_i8imm(12)).to_str(),
+        //            "mov si, 12");
     }
 
     #[test]
