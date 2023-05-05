@@ -260,45 +260,48 @@ fn cmd_as_str(cmd: Command) -> &'static str {
     }
 }
 
-fn reg_as_str(r: Reg) -> &'static str
-{
-    use Reg::*;
-    match r {
-        Al => "al",
-        Ah => "ah",
-        Ax => "ax",
-        Bl => "bl",
-        Bh => "bh",
-        Bx => "bx",
-        Cl => "cl",
-        Ch => "ch",
-        Cx => "cx",
-        Dl => "dl",
-        Dh => "dh",
-        Dx => "dx",
-        Sp => "sp",
-        Bp => "bp",
-        Si => "si",
-        Di => "di",
+impl Reg {
+    fn to_str(self) -> &'static str
+    {
+        use Reg::*;
+        match self {
+            Al => "al",
+            Ah => "ah",
+            Ax => "ax",
+            Bl => "bl",
+            Bh => "bh",
+            Bx => "bx",
+            Cl => "cl",
+            Ch => "ch",
+            Cx => "cx",
+            Dl => "dl",
+            Dh => "dh",
+            Dx => "dx",
+            Sp => "sp",
+            Bp => "bp",
+            Si => "si",
+            Di => "di",
+        }
     }
 }
 
-fn adr_reg_to_str(r: AdrReg) -> &'static str
-{
-    use AdrReg::*;
-    match r {
-        BxSi => "bx + si",
-        BxDi => "bx + di",
-        BpSi => "bp + si",
-        BpDi => "bp + di",
-        Si => "si",
-        Di => "di",
-        Bp => "bp",
-        Bx => "bx",
-        Direct => ""
+impl AdrReg {
+    fn to_str(self) -> &'static str
+    {
+        use AdrReg::*;
+        match self {
+            BxSi => "bx + si",
+            BxDi => "bx + di",
+            BpSi => "bp + si",
+            BpDi => "bp + di",
+            Si => "si",
+            Di => "di",
+            Bp => "bp",
+            Bx => "bx",
+            Direct => ""
+        }
     }
 }
-
 
 #[derive (Copy, Clone)]
 enum Operand{
@@ -308,37 +311,39 @@ enum Operand{
     Ptr((AdrReg, i16))
 }
 
-struct Instruction
-{
-    cmd: Command,
-    op1: Option<Operand>,
-    op2: Option<Operand>,
-}
-
-fn operand_to_str(operand: Operand) -> String
-{
-    use Operand::*;
-    match operand {
-        Reg(r) => String::from(reg_as_str(r)),
-        ImmI8(v) => String::from(format!("{}", v)),
-        ImmI16(v) => String::from(format!("{}", v)),
-        Ptr((ar, d)) => {
-            let rstr = adr_reg_to_str(ar);
-            if d == 0 {
-                String::from(format!("[{}]", rstr))
-            } else {
-                if ar == AdrReg::DirAdr {
-                    String::from(format!("[{}]", d))
+impl Operand {
+    fn to_str(self) -> String
+    {
+        use Operand::*;
+        match self {
+            Reg(r) => String::from(r.to_str()),
+            ImmI8(v) => String::from(format!("{}", v)),
+            ImmI16(v) => String::from(format!("{}", v)),
+            Ptr((ar, d)) => {
+                let rstr = ar.to_str();
+                if d == 0 {
+                    String::from(format!("[{}]", rstr))
                 } else {
-                    if d > 0 {
-                        String::from(format!("[{} + {}]", rstr, d))
+                    if ar == AdrReg::DirAdr {
+                        String::from(format!("[{}]", d))
                     } else {
-                        String::from(format!("[{} - {}]", rstr, -d))
+                        if d > 0 {
+                            String::from(format!("[{} + {}]", rstr, d))
+                        } else {
+                            String::from(format!("[{} - {}]", rstr, -d))
+                        }
                     }
                 }
             }
         }
     }
+}
+
+struct Instruction
+{
+    cmd: Command,
+    op1: Option<Operand>,
+    op2: Option<Operand>,
 }
 
 impl Instruction {
@@ -356,10 +361,10 @@ impl Instruction {
     fn to_str(&self) -> String {
         let mut ret = String::from(cmd_as_str(self.cmd));
         match self.op1 {
-            Some(o) => {
-                ret.push_str(&String::from(format!(" {}", operand_to_str(o))));
+            Some(o1) => {
+                ret.push_str(&String::from(format!(" {}", o1.to_str())));
                 match self.op2 {
-                    Some(o2) => { ret.push_str(&String::from(format!(", {}", operand_to_str(o2))));},
+                    Some(o2) => { ret.push_str(&String::from(format!(", {}", o2.to_str())));},
                     None => {;}
                 };
             },
