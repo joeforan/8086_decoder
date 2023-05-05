@@ -1301,7 +1301,10 @@ mod test {
        assert_eq!(Instruction::src_dst(Command::Mov,
                                         Operand::Ptr((AdrReg::DirAdr, 3458)),
                                         Operand::Reg(Reg::Bx)).to_str(),
-                   "mov bx, [3458]");
+                  "mov bx, [3458]");
+        assert_eq!(Instruction::jmp(Command::Jne,
+                                    -2).to_str(),
+                   format!("jnz {} -2", OFFSET_STR));
     }
 
     #[test]
