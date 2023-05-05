@@ -306,11 +306,10 @@ impl AdrReg {
 #[derive (Copy, Clone)]
 enum Operand{
     Reg(Reg),
-    ImmI8(i8),
-    ImmI16(i16),
+    Imm(i16),
     Ptr((AdrReg, i16)),
-    Offset(i8)
-
+    Offset(i8),
+    ByteImm(u8)
 }
 
 impl Operand {
@@ -319,8 +318,7 @@ impl Operand {
         use Operand::*;
         match self {
             Reg(r) => String::from(r.to_str()),
-            ImmI8(v) => String::from(format!("{}", v)),
-            ImmI16(v) => String::from(format!("{}", v)),
+            Imm(v) => String::from(format!("{}", v)),
             Ptr((ar, d)) => {
                 let rstr = ar.to_str();
                 if d == 0 {
@@ -339,14 +337,26 @@ impl Operand {
             },
             Offset(offset) => {
                 String::from(format!("{} {}", OFFSET_STR, offset))
+            },
+            ByteImm(v) => {
+                String::from(format!("byte {}", v))
             }
+
         }
     }
+}
+
+#[derive (Copy, Clone)]
+enum Size
+{
+    Byte,
+    Word
 }
 
 struct Instruction
 {
     cmd: Command,
+    size: Option<Size>,
     op1: Option<Operand>,
     op2: Option<Operand>,
 }
@@ -359,7 +369,8 @@ impl Instruction {
         Instruction {
             cmd: cmd,
             op1: Some(dst),
-            op2: Some(src)
+            op2: Some(src),
+            size: None
         }
     }
 
@@ -369,12 +380,27 @@ impl Instruction {
         Instruction {
             cmd: cmd,
             op1: Some(Operand::Offset(offset)),
-            op2: None
+            op2: None,
+            size: None
         }
+    }
+
+    fn size(mut self, sz: Size) -> Self{
+        self.size = Some(sz);
+        self
     }
 
     fn to_str(&self) -> String {
         let mut ret = String::from(cmd_as_str(self.cmd));
+        match self.size {
+            None => {},
+            Some(sz) => {
+                match sz {
+                    Size::Byte => {ret.push_str(" byte");},
+                    Size::Word => {ret.push_str(" word");}
+                }
+            }
+        };
         match self.op1 {
             Some(o1) => {
                 ret.push_str(&String::from(format!(" {}", o1.to_str())));
@@ -1282,11 +1308,11 @@ mod test {
                                         Operand::Reg(Reg::Cx)).to_str(),
                    "mov cx, bx");
         assert_eq!(Instruction::src_dst(Command::Mov,
-                                        Operand::ImmI8(12),
+                                        Operand::Imm(12),
                                         Operand::Reg(Reg::Si)).to_str(),
                    "mov si, 12");
         assert_eq!(Instruction::src_dst(Command::Mov,
-                                        Operand::ImmI16(-3948),
+                                        Operand::Imm(-3948),
                                         Operand::Reg(Reg::Dx)).to_str(),
                    "mov dx, -3948");
         assert_eq!(Instruction::src_dst(Command::Mov,
@@ -1320,6 +1346,24 @@ mod test {
         assert_eq!(Instruction::jump(Command::Jne,
                                     -2).to_str(),
                    format!("jne {} -2", OFFSET_STR));
+        assert_eq!(Instruction::src_dst(Command::Add,
+                                        Operand::Ptr((AdrReg::BxSi, 0)),
+                                        Operand::Reg(Reg::Bx)).to_str(),
+                   "add bx, [bx + si]");
+        assert_eq!(Instruction::src_dst(Command::Mov,
+                                        Operand::Imm(7),
+                                        Operand::Ptr((AdrReg::BpDi, 0)))
+                   .size(Size::Byte)
+                   .to_str(),
+                   "mov byte [bp + di], 7");
+        assert_eq!(Instruction::src_dst(Command::Mov,
+                                        Operand::Imm(7),
+                                        Operand::Ptr((AdrReg::BpDi, 0))).size(Size::Word)
+                   .to_str(),
+                   "mov word [bp + di], 7");
+        // assert_eq!(Instruction::single_op(Command::Push,
+        //                                   Operand::Reg(Reg::Cx)).to_str(),
+        //            "push cx")
     }
 
     #[test]
