@@ -1052,7 +1052,7 @@ fn decode_imm_rm_instruction(cmd: Command, data: &[u8]) -> (usize, Instruction) 
                     if use_s_flag {
                         let s_flag = (data[0] & S_MASK) >> S_SHFT;
                         if s_flag == 0 {
-                            (data_offset + 3,
+                            (data_offset + 4,
                              Instruction::src_dst(sub_code, Operand::ImmU16(read_u16_val(&data[data_idx..data_idx+2])), reg_operand).size(DataSize::Word))
                         } else {
                             (data_offset + 3,
@@ -1337,7 +1337,7 @@ fn decode_segment_instruction(_cmd: Command, data: &[u8]) -> (usize, Instruction
         _ => panic!("Invalid segment prefix")
     };
     let (sub_len, sub_inst) = decode_instruction(&data[1..]);
-    (sub_len +1, sub_inst.set_segment(sr))
+    (sub_len + 1, sub_inst.set_segment(sr))
 }
 
 fn decode_instruction(data: &[u8]) -> (usize, Instruction)
@@ -2746,5 +2746,15 @@ mod test {
                    (4, String::from("mov dx, es:[bp]")));
         assert_eq!(disassemble(&[0x36, 0x8a, 0x60, 0x04]),
                    (4, String::from("mov ah, ss:[bx + si + 4]")));
+    }
+
+    #[test]
+    fn test_lock_then_seg() {
+        assert_eq!(disassemble(&[0x81, 0x98, 0x14, 0xef, 0x58, 0x28]),
+                   (6, String::from("sbb word [bx + si - 4332], 10328")));
+        assert_eq!(disassemble(&[0x2e, 0x81, 0x98, 0x14, 0xef, 0x58, 0x28]),
+                   (7, String::from("sbb word cs:[bx + si - 4332], 10328")));
+        assert_eq!(disassemble(&[0xf0, 0x2e, 0xf6, 0x96, 0xb1, 0x26]),
+                   (6, String::from("lock not byte cs:[bp + 9905]")));
     }
 }
