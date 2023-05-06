@@ -396,7 +396,7 @@ impl Operand {
                     String::from(format!("[{}]", rstr))
                 } else {
                     if ar == AdrReg::DirAdr {
-                        String::from(format!("[{}]", d))
+                        String::from(format!("[{}]", d as u32))
                     } else {
                         if d > 0 {
                             String::from(format!("[{} + {}]", rstr, d))
@@ -1046,10 +1046,10 @@ fn decode_imm_rm_instruction(cmd: Command, data: &[u8]) -> (usize, Instruction) 
             let sw_flag = get_two_bit_value(data[0] & 0x3);
             match sw_flag {
                 DBV01 => (4,
-                          Instruction::src_dst(cmd, Operand::Imm(read_i16_val(&data[data_idx..data_idx+2])),
+                          Instruction::src_dst(sub_code, Operand::Imm(read_i16_val(&data[data_idx..data_idx+2])),
                                                 rm_operand)),
                 _ => (3,
-                      Instruction::src_dst(cmd, Operand::Imm(data[data_idx] as i16), rm_operand))
+                      Instruction::src_dst(sub_code, Operand::Imm(data[data_idx] as i16), rm_operand))
             }
         }
     }
@@ -1064,8 +1064,8 @@ fn decode_acc_mem_instruction(cmd: Command, data: &[u8]) -> (usize, Instruction)
     let val = read_i16_val(&data[1..2+w_flag as usize]);
     let d_flag = get_bit_value((data[0] & D_MASK) >> D_SHFT);
     match d_flag {
-        BV0 => (3, Instruction::src_dst(cmd, Operand::Imm(val), reg_operand)),
-        BV1 => (3, Instruction::src_dst(cmd, reg_operand, Operand::Imm(val)))
+        BV0 => (3, Instruction::src_dst(cmd, Operand::Ptr((AdrReg::DirAdr, val)), reg_operand)),
+        BV1 => (3, Instruction::src_dst(cmd, reg_operand, Operand::Ptr((AdrReg::DirAdr, val))))
     }
 }
 
@@ -1778,7 +1778,7 @@ mod test {
         assert_eq!(disassemble(&test_data_w2[2]),
                    (2, String::from("add al, ah")));
         assert_eq!(disassemble(&test_data_w2[3]),
-                   (2, String::from("add al, -30")));
+                   (2, String::from("add al, 226")));
         assert_eq!(disassemble(&test_data_w2[4]),
                    (2, String::from("add al, 9")));
         assert_eq!(disassemble(&test_data_w3[0]),
