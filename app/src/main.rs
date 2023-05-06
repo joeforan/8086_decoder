@@ -87,7 +87,6 @@ enum Command {
     Call,
     Jmp,
     Ret,
-    //Retnz,
     Je,
     Jl,
     Jle,
@@ -143,7 +142,6 @@ enum Command {
     Hlt,
     Wait,
     Lock,
-    //Retf,
     Nop,
 }
 
@@ -174,19 +172,6 @@ enum SegReg {
     Ss
 }
 
-impl SegReg {
-    fn to_str(self) -> &'static str {
-        use SegReg::*;
-        match self {
-            Cs => "cs",
-            Ds => "ds",
-            Es => "es",
-            Ss => "ss"
-        }
-    }
-}
-
-
 #[derive (PartialEq, Copy, Clone)]
 enum AdrReg {
     BxSi,
@@ -197,6 +182,50 @@ enum AdrReg {
     Di,
     Bp,
     Bx,
+}
+
+#[derive(Copy, Clone)]
+enum RepeatOperand {
+    Movsb,
+    Movsw,
+    Cmpsb,
+    Cmpsw,
+    Scasb,
+    Scasw,
+    Lodsb,
+    Lodsw,
+    Stosb,
+    Stosw,
+}
+
+#[derive (Copy, Clone)]
+enum Operand{
+    Reg(Reg),
+    SegReg(SegReg),
+    ImmU8(u8),
+    ImmI8(i8),
+    ImmU16(u16),
+    ImmI16(i16),
+    PtrDisp((AdrReg, i16)),
+    PtrDir(u16),
+    Offset(i8),
+    RepeatOperand(RepeatOperand)
+}
+
+#[derive (Copy, Clone)]
+enum DataSize
+{
+    Byte,
+    Word
+}
+
+struct Instruction
+{
+    cmd: Command,
+    op1: Option<Operand>,
+    op2: Option<Operand>,
+    size: Option<DataSize>,
+    lock: bool
 }
 
 impl Command {
@@ -337,19 +366,18 @@ impl AdrReg {
     }
 }
 
-#[derive(Copy, Clone)]
-enum RepeatOperand {
-    Movsb,
-    Movsw,
-    Cmpsb,
-    Cmpsw,
-    Scasb,
-    Scasw,
-    Lodsb,
-    Lodsw,
-    Stosb,
-    Stosw,
+impl SegReg {
+    fn to_str(self) -> &'static str {
+        use SegReg::*;
+        match self {
+            Cs => "cs",
+            Ds => "ds",
+            Es => "es",
+            Ss => "ss"
+        }
+    }
 }
+
 
 impl RepeatOperand {
     fn to_str(self) -> &'static str
@@ -368,20 +396,6 @@ impl RepeatOperand {
             Stosw => "stosw"
         }
     }
-}
-
-#[derive (Copy, Clone)]
-enum Operand{
-    Reg(Reg),
-    SegReg(SegReg),
-    ImmU8(u8),
-    ImmI8(i8),
-    ImmU16(u16),
-    ImmI16(i16),
-    PtrDisp((AdrReg, i16)),
-    PtrDir(u16),
-    Offset(i8),
-    RepeatOperand(RepeatOperand)
 }
 
 impl Operand {
@@ -417,22 +431,6 @@ impl Operand {
 
         }
     }
-}
-
-#[derive (Copy, Clone)]
-enum Size
-{
-    Byte,
-    Word
-}
-
-struct Instruction
-{
-    cmd: Command,
-    op1: Option<Operand>,
-    op2: Option<Operand>,
-    size: Option<Size>,
-    lock: bool
 }
 
 impl Instruction {
@@ -484,7 +482,7 @@ impl Instruction {
         }
     }
 
-    fn size(mut self, sz: Size) -> Self{
+    fn size(mut self, sz: DataSize) -> Self{
         self.size = Some(sz);
         self
     }
@@ -507,8 +505,8 @@ impl Instruction {
             None => {},
             Some(sz) => {
                 match sz {
-                    Size::Byte => {ret.push_str(" byte");},
-                    Size::Word => {ret.push_str(" word");}
+                    DataSize::Byte => {ret.push_str(" byte");},
+                    DataSize::Word => {ret.push_str(" word");}
                 }
             }
         };
@@ -526,24 +524,6 @@ impl Instruction {
     }
 }
 
-fn repeat_operand_from_byte(byte: u8) -> Operand
-{
-    use RepeatOperand::*;
-    Operand::RepeatOperand(
-        match byte {
-            0xA4 => Movsb,
-            0xA5 => Movsw,
-            0xA6 => Cmpsb,
-            0xA7 => Cmpsw,
-            0xAA => Stosb,
-            0xAB => Stosw,
-            0xAC => Lodsb,
-            0xAD => Lodsw,
-            0xAE => Scasb,
-            0xAF => Scasw,
-            _ => panic!("Unknown repeat operand byte: {}", byte)
-    })
-}
 
 const D_MASK: u8 = 0x02;
 const D_SHFT: u8 = 1;
@@ -889,6 +869,16 @@ fn get_three_bit_value(b: u8) -> ThreeBitValue {
     }
 }
 
+fn read_i16_val(data: &[u8]) -> i16
+{
+    data [0] as i16 | ((data[1] as i16) << 8)
+}
+
+fn read_u16_val(data: &[u8]) -> u16
+{
+    data [0] as u16 | ((data[1] as u16) << 8)
+}
+
 fn get_seg_reg_operand(code: TwoBitValue) -> Operand
 {
     use TwoBitValue::*;
@@ -902,7 +892,7 @@ fn get_seg_reg_operand(code: TwoBitValue) -> Operand
 }
 
 fn get_reg_operand(flag: BitValue,
-               code: ThreeBitValue) -> Operand
+                   code: ThreeBitValue) -> Operand
 {
     use Reg::*;
     const REGS_BYTE: [Reg; 8] = [Al, Cl, Dl, Bl, Ah, Ch, Dh, Bh];
@@ -916,14 +906,23 @@ fn get_reg_operand(flag: BitValue,
     )
 }
 
-fn read_i16_val(data: &[u8]) -> i16
+fn repeat_operand_from_byte(byte: u8) -> Operand
 {
-    data [0] as i16 | ((data[1] as i16) << 8)
-}
-
-fn read_u16_val(data: &[u8]) -> u16
-{
-    data [0] as u16 | ((data[1] as u16) << 8)
+    use RepeatOperand::*;
+    Operand::RepeatOperand(
+        match byte {
+            0xA4 => Movsb,
+            0xA5 => Movsw,
+            0xA6 => Cmpsb,
+            0xA7 => Cmpsw,
+            0xAA => Stosb,
+            0xAB => Stosw,
+            0xAC => Lodsb,
+            0xAD => Lodsw,
+            0xAE => Scasb,
+            0xAF => Scasw,
+            _ => panic!("Unknown repeat operand byte: {}", byte)
+    })
 }
 
 fn get_mem_ptr_and_displacement(data: &[u8],
@@ -1016,27 +1015,27 @@ fn decode_imm_rm_instruction(cmd: Command, data: &[u8]) -> (usize, Instruction) 
 
         if (data[0] & 0xFE) == 0xC6 {
             return match w_flag {
-                BV0 =>  (data_offset + 3, Instruction::src_dst(sub_code, Operand::ImmU8(data[data_idx]), reg_operand).size(Size::Byte)),
+                BV0 =>  (data_offset + 3, Instruction::src_dst(sub_code, Operand::ImmU8(data[data_idx]), reg_operand).size(DataSize::Byte)),
                 BV1 =>  (data_offset + 4, Instruction::src_dst(sub_code, Operand::ImmU16(read_u16_val(&data[data_idx..data_idx+2])),
-                                                                reg_operand).size(Size::Word))
+                                                                reg_operand).size(DataSize::Word))
             }
         } else {
             return match w_flag {
                 BV0 =>  (data_offset + 3,
-                         Instruction::src_dst(sub_code, Operand::ImmU8(data[data_idx]), reg_operand).size(Size::Byte)),
+                         Instruction::src_dst(sub_code, Operand::ImmU8(data[data_idx]), reg_operand).size(DataSize::Byte)),
                 BV1 =>  {
                     if use_s_flag {
                         let s_flag = (data[0] & S_MASK) >> S_SHFT;
                         if s_flag == 0 {
                             (data_offset + 3,
-                             Instruction::src_dst(sub_code, Operand::ImmU16(read_u16_val(&data[data_idx..data_idx+2])), reg_operand).size(Size::Word))
+                             Instruction::src_dst(sub_code, Operand::ImmU16(read_u16_val(&data[data_idx..data_idx+2])), reg_operand).size(DataSize::Word))
                         } else {
                             (data_offset + 3,
-                             Instruction::src_dst(sub_code, Operand::ImmU8(data[data_idx]), reg_operand).size(Size::Word))
+                             Instruction::src_dst(sub_code, Operand::ImmU8(data[data_idx]), reg_operand).size(DataSize::Word))
                         }
                     } else {
                         (data_offset + 4,
-                         Instruction::src_dst(sub_code, Operand::ImmU16(read_u16_val(&data[data_idx..data_idx+2])), reg_operand).size(Size::Word))
+                         Instruction::src_dst(sub_code, Operand::ImmU16(read_u16_val(&data[data_idx..data_idx+2])), reg_operand).size(DataSize::Word))
                     }
                 }
             }
@@ -1171,7 +1170,7 @@ fn decode_shift_rot_instruction(_cmd: Command, data: &[u8]) -> (usize, Instructi
             }
         },
         _ => {
-            let size = match w_flag { BV0 => Size::Byte, BV1 => Size::Word};
+            let size = match w_flag { BV0 => DataSize::Byte, BV1 => DataSize::Word};
             match v_flag {
                 BV0 => (2 + t.0, Instruction::src_dst(sub_cmd, Operand::ImmU8(1), t.1).size(size)),
                 BV1 => (2 + t.0, Instruction::src_dst(sub_cmd, Operand::Reg(Reg::Cl), t.1).size(size))
@@ -1228,8 +1227,8 @@ fn decode_rm_with_disp_instruction(_cmd: Command, data: &[u8]) -> (usize, Instru
     if use_w_flag && (mod_code != DBV11) {
         let w_flag = get_bit_value((data[0] & W_MASK) >> W_SHFT);
         let size = match w_flag {
-            BV0 => Size::Byte,
-            BV1 => Size::Word
+            BV0 => DataSize::Byte,
+            BV1 => DataSize::Word
         };
         (2 + t.0, Instruction::single_op(sub_cmd, t.1).size(size))
     } else {
@@ -1245,7 +1244,7 @@ fn decode_single_byte_instruction_with_sr(cmd: Command, data: &[u8]) -> (usize, 
 fn decode_single_byte_instruction_with_reg(cmd: Command, data: &[u8]) -> (usize, Instruction) {
     let reg_operand = get_reg_operand(BitValue::BV1, get_three_bit_value(data[0] & 0x7));
     if cmd == Command::Xchg {
-        (1, Instruction::src_dst(cmd, reg_operand, Operand::Reg(Reg::Ax)))
+        (1, Instruction::src_dst(cmd, Operand::Reg(Reg::Ax), reg_operand))
     } else {
         (1, Instruction::single_op(cmd, reg_operand))
     }
@@ -1464,12 +1463,12 @@ mod test {
         assert_eq!(Instruction::src_dst(Command::Mov,
                                         Operand::ImmU8(7),
                                         Operand::PtrDisp((AdrReg::BpDi, 0)))
-                   .size(Size::Byte)
+                   .size(DataSize::Byte)
                    .to_str(),
                    "mov byte [bp + di], 7");
         assert_eq!(Instruction::src_dst(Command::Mov,
                                         Operand::ImmU8(7),
-                                        Operand::PtrDisp((AdrReg::BpDi, 0))).size(Size::Word)
+                                        Operand::PtrDisp((AdrReg::BpDi, 0))).size(DataSize::Word)
                    .to_str(),
                    "mov word [bp + di], 7");
         assert_eq!(Instruction::single_op(Command::Push,
@@ -1477,7 +1476,7 @@ mod test {
                    "push cx");
         assert_eq!(Instruction::single_op(Command::Push,
                                           Operand::PtrDisp((AdrReg::BxDi, -30)))
-                   .size(Size::Word)
+                   .size(DataSize::Word)
                    .to_str(),
                    "push word [bx + di - 30]");
 
@@ -2114,13 +2113,13 @@ mod test {
         assert_eq!(disassemble(&[0x90]),
                    (1, String::from("xchg ax, ax")));
         assert_eq!(disassemble(&[0x92]),
-                   (1, String::from("xchg ax, dx")));
+                   (1, String::from("xchg dx, ax")));
         assert_eq!(disassemble(&[0x94]),
-                   (1, String::from("xchg ax, sp")));
+                   (1, String::from("xchg sp, ax")));
         assert_eq!(disassemble(&[0x96]),
-                   (1, String::from("xchg ax, si")));
+                   (1, String::from("xchg si, ax")));
         assert_eq!(disassemble(&[0x97]),
-                   (1, String::from("xchg ax, di")));
+                   (1, String::from("xchg di, ax")));
         assert_eq!(disassemble(&[0x87, 0xca]),
                    (2, String::from("xchg cx, dx")));
         assert_eq!(disassemble(&[0x87, 0xf1]),
