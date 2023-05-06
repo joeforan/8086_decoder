@@ -52,6 +52,7 @@ enum OpcodeParseType
     Int,
     Lock,
     Segment,
+    Intersegment,
     Direct,
     Nop
 }
@@ -227,7 +228,9 @@ struct Instruction
     op2: Option<Operand>,
     size: Option<DataSize>,
     lock: bool,
-    segment: Option<SegReg>
+    segment: Option<SegReg>,
+    is_intersegment: bool
+
 }
 
 impl Command {
@@ -460,47 +463,33 @@ impl Instruction {
             op2: None,
             size: None,
             lock: false,
-            segment: None
+            segment: None,
+            is_intersegment: false
         }
     }
     fn single_op(cmd: Command,
                  op: Operand) -> Self
     {
-        Instruction {
-            cmd: cmd,
-            op1: Some(op),
-            op2: None,
-            size: None,
-            lock: false,
-            segment: None
-        }
+        let mut ret = Self::no_op(cmd);
+        ret.op1 = Some(op);
+        ret
     }
 
     fn src_dst(cmd: Command,
                 src: Operand,
                 dst: Operand) -> Self
     {
-        Instruction {
-            cmd: cmd,
-            op1: Some(dst),
-            op2: Some(src),
-            size: None,
-            lock: false,
-            segment: None
-        }
+        let mut ret = Self::single_op(cmd, dst);
+        ret.op2 = Some(src);
+        ret
     }
 
     fn jump(cmd: Command,
             offset: i8) -> Self
     {
-        Instruction {
-            cmd: cmd,
-            op1: Some(Operand::Offset(offset)),
-            op2: None,
-            size: None,
-            lock: false,
-            segment: None
-        }
+        let mut ret = Self::no_op(cmd);
+        ret.op1 = Some(Operand::Offset(offset));
+        ret
     }
 
     fn size(mut self, sz: DataSize) -> Self{
@@ -515,6 +504,11 @@ impl Instruction {
 
     fn set_segment(mut self, sr: SegReg) -> Self {
         self.segment = Some(sr);
+        self
+    }
+
+    fn set_intersegment(mut self) -> Self {
+        self.is_intersegment = true;
         self
     }
 
@@ -539,12 +533,18 @@ impl Instruction {
             Some(o1) => {
                 ret.push_str(&String::from(format!(" {}", maybe_prepend_segment(o1, self.segment))));
                 match self.op2 {
-                    Some(o2) => { ret.push_str(&String::from(format!(", {}", maybe_prepend_segment(o2, self.segment))));},
+                    Some(o2) => {
+                        if self.is_intersegment {
+                            ret.push_str(&String::from(format!(":{}", o2.to_str())));
+                        } else {
+                            ret.push_str(&String::from(format!(", {}", maybe_prepend_segment(o2, self.segment))));
+                        }
+                    },
                     None => {;}
-                };
+                }
             },
             None => {;}
-        };
+        }
         ret
     }
 }
@@ -743,7 +743,7 @@ const OPCODE_TABLE: [OpcodeTableEntry; 256] =
         OpcodeTableEntry { cmd: Command::Xchg, opt: OpcodeParseType::SingleByteWithReg}, //0x97
         OpcodeTableEntry { cmd: Command::Cbw, opt: OpcodeParseType::Direct}, //0x98
         OpcodeTableEntry { cmd: Command::Cwd, opt: OpcodeParseType::Direct}, //0x99
-        OpcodeTableEntry { cmd: Command::Nop, opt: OpcodeParseType::Nop}, //0x9A
+        OpcodeTableEntry { cmd: Command::Call, opt: OpcodeParseType::Intersegment}, //0x9A
         OpcodeTableEntry { cmd: Command::Wait, opt: OpcodeParseType::Direct}, //0x9B
         OpcodeTableEntry { cmd: Command::Pushf, opt: OpcodeParseType::Direct}, //0x9C
         OpcodeTableEntry { cmd: Command::Popf, opt: OpcodeParseType::Direct}, //0x9D
@@ -823,7 +823,7 @@ const OPCODE_TABLE: [OpcodeTableEntry; 256] =
         OpcodeTableEntry { cmd: Command::Out, opt: OpcodeParseType::InOut}, //0xE7
         OpcodeTableEntry { cmd: Command::Nop, opt: OpcodeParseType::Nop}, //0xE8
         OpcodeTableEntry { cmd: Command::Nop, opt: OpcodeParseType::Nop}, //0xE9
-        OpcodeTableEntry { cmd: Command::Nop, opt: OpcodeParseType::Nop}, //0xEA
+        OpcodeTableEntry { cmd: Command::Jmp, opt: OpcodeParseType::Intersegment}, //0xEA
         OpcodeTableEntry { cmd: Command::Nop, opt: OpcodeParseType::Nop}, //0xEB
         OpcodeTableEntry { cmd: Command::In, opt: OpcodeParseType::InOut}, //0xEC
         OpcodeTableEntry { cmd: Command::In, opt: OpcodeParseType::InOut}, //0xED
@@ -1322,6 +1322,13 @@ fn decode_direct_instruction(cmd: Command, _data: &[u8]) -> (usize, Instruction)
     (1, Instruction::no_op(cmd))
 }
 
+fn decode_intersegment_instruction(cmd: Command, data: &[u8]) -> (usize, Instruction) {
+    (5, Instruction::src_dst(cmd,
+                             Operand::ImmU16(read_u16_val(&data[1..3])),
+                             Operand::ImmU16(read_u16_val(&data[3..5])))
+     .set_intersegment())
+}
+
 fn decode_lock_instruction(_cmd: Command, data: &[u8]) -> (usize, Instruction){
     let (sub_len, sub_inst) = decode_instruction(&data[1..]);
     (sub_len + 1, sub_inst.lock())
@@ -1361,6 +1368,7 @@ fn decode_instruction(data: &[u8]) -> (usize, Instruction)
         OpcodeParseType::Repeat => decode_repeat_instruction(opcode.cmd, data),
         OpcodeParseType::Return => decode_return_instruction(opcode.cmd, data),
         OpcodeParseType::Int => decode_int_instruction(opcode.cmd, data),
+        OpcodeParseType::Intersegment => decode_intersegment_instruction(opcode.cmd, data),
         OpcodeParseType::Lock => decode_lock_instruction(opcode.cmd, data),
         OpcodeParseType::Segment => decode_segment_instruction(opcode.cmd, data),
         OpcodeParseType::Direct => decode_direct_instruction(opcode.cmd, data),
@@ -2756,5 +2764,13 @@ mod test {
                    (7, String::from("sbb word cs:[bx + si - 4332], 10328")));
         assert_eq!(disassemble(&[0xf0, 0x2e, 0xf6, 0x96, 0xb1, 0x26]),
                    (6, String::from("lock not byte cs:[bp + 9905]")));
+    }
+
+    #[test]
+    fn test_intersegment_calls() {
+        assert_eq!(disassemble(&[0x9a, 0xc8, 0x01, 0x7b, 0x00]),
+                   (5, String::from("call 123:456")));
+        assert_eq!(disassemble(&[0xea, 0x22, 0x00, 0x15, 0x03]),
+                   (5, String::from("jmp 789:34")));
     }
 }
