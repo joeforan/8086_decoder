@@ -646,22 +646,22 @@ const OPCODE_TABLE: [OpcodeTableEntry; 256] =
         OpcodeTableEntry { cmd: Command::Cmp, opt: OpcodeParseType::ImmAcc}, //0x3D
         OpcodeTableEntry { cmd: Command::Nop, opt: OpcodeParseType::Nop}, //0x3E
         OpcodeTableEntry { cmd: Command::Aas, opt: OpcodeParseType::Direct}, //0x3F
-        OpcodeTableEntry { cmd: Command::Inc, opt: OpcodeParseType::Direct}, //0x40
-        OpcodeTableEntry { cmd: Command::Inc, opt: OpcodeParseType::Direct}, //0x41
-        OpcodeTableEntry { cmd: Command::Inc, opt: OpcodeParseType::Direct}, //0x42
-        OpcodeTableEntry { cmd: Command::Inc, opt: OpcodeParseType::Direct}, //0x43
-        OpcodeTableEntry { cmd: Command::Inc, opt: OpcodeParseType::Direct}, //0x44
-        OpcodeTableEntry { cmd: Command::Inc, opt: OpcodeParseType::Direct}, //0x45
-        OpcodeTableEntry { cmd: Command::Inc, opt: OpcodeParseType::Direct}, //0x46
-        OpcodeTableEntry { cmd: Command::Inc, opt: OpcodeParseType::Direct}, //0x47
-        OpcodeTableEntry { cmd: Command::Dec, opt: OpcodeParseType::Direct}, //0x48
-        OpcodeTableEntry { cmd: Command::Dec, opt: OpcodeParseType::Direct}, //0x49
-        OpcodeTableEntry { cmd: Command::Dec, opt: OpcodeParseType::Direct}, //0x4A
-        OpcodeTableEntry { cmd: Command::Dec, opt: OpcodeParseType::Direct}, //0x4B
-        OpcodeTableEntry { cmd: Command::Dec, opt: OpcodeParseType::Direct}, //0x4C
-        OpcodeTableEntry { cmd: Command::Dec, opt: OpcodeParseType::Direct}, //0x4D
-        OpcodeTableEntry { cmd: Command::Dec, opt: OpcodeParseType::Direct}, //0x4E
-        OpcodeTableEntry { cmd: Command::Dec, opt: OpcodeParseType::Direct}, //0x4F
+        OpcodeTableEntry { cmd: Command::Inc, opt: OpcodeParseType::SingleByteWithReg}, //0x40
+        OpcodeTableEntry { cmd: Command::Inc, opt: OpcodeParseType::SingleByteWithReg}, //0x41
+        OpcodeTableEntry { cmd: Command::Inc, opt: OpcodeParseType::SingleByteWithReg}, //0x42
+        OpcodeTableEntry { cmd: Command::Inc, opt: OpcodeParseType::SingleByteWithReg}, //0x43
+        OpcodeTableEntry { cmd: Command::Inc, opt: OpcodeParseType::SingleByteWithReg}, //0x44
+        OpcodeTableEntry { cmd: Command::Inc, opt: OpcodeParseType::SingleByteWithReg}, //0x45
+        OpcodeTableEntry { cmd: Command::Inc, opt: OpcodeParseType::SingleByteWithReg}, //0x46
+        OpcodeTableEntry { cmd: Command::Inc, opt: OpcodeParseType::SingleByteWithReg}, //0x47
+        OpcodeTableEntry { cmd: Command::Dec, opt: OpcodeParseType::SingleByteWithReg}, //0x48
+        OpcodeTableEntry { cmd: Command::Dec, opt: OpcodeParseType::SingleByteWithReg}, //0x49
+        OpcodeTableEntry { cmd: Command::Dec, opt: OpcodeParseType::SingleByteWithReg}, //0x4A
+        OpcodeTableEntry { cmd: Command::Dec, opt: OpcodeParseType::SingleByteWithReg}, //0x4B
+        OpcodeTableEntry { cmd: Command::Dec, opt: OpcodeParseType::SingleByteWithReg}, //0x4C
+        OpcodeTableEntry { cmd: Command::Dec, opt: OpcodeParseType::SingleByteWithReg}, //0x4D
+        OpcodeTableEntry { cmd: Command::Dec, opt: OpcodeParseType::SingleByteWithReg}, //0x4E
+        OpcodeTableEntry { cmd: Command::Dec, opt: OpcodeParseType::SingleByteWithReg}, //0x4F
         OpcodeTableEntry { cmd: Command::Push, opt: OpcodeParseType::SingleByteWithReg}, //0x50
         OpcodeTableEntry { cmd: Command::Push, opt: OpcodeParseType::SingleByteWithReg}, //0x51
         OpcodeTableEntry { cmd: Command::Push, opt: OpcodeParseType::SingleByteWithReg}, //0x52
@@ -929,7 +929,7 @@ fn get_mem_ptr_and_displacement(data: &[u8],
 
     if (mod_code == DBV00) && (rm_code == TBV110) {
         let disp = read_i16_val(&data[2..4]);
-        (2, Operand::Imm(disp))
+        (2, Operand::Ptr((AdrReg::DirAdr, disp)))
     } else {
         let ar = match rm_code {
             TBV000 => AdrReg::BxSi,
