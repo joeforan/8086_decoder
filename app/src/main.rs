@@ -51,6 +51,7 @@ enum OpcodeParseType
     Return,
     Int,
     Lock,
+    Segment,
     Direct,
     Nop
 }
@@ -225,7 +226,8 @@ struct Instruction
     op1: Option<Operand>,
     op2: Option<Operand>,
     size: Option<DataSize>,
-    lock: bool
+    lock: bool,
+    segment: Option<SegReg>
 }
 
 impl Command {
@@ -433,6 +435,22 @@ impl Operand {
     }
 }
 
+fn maybe_prepend_segment(op: Operand, segment: Option<SegReg>) -> String {
+    use Operand::*;
+    match segment {
+        None => op.to_str(),
+        Some(sr) => {
+            match op {
+                PtrDir(_) |
+                PtrDisp(_) => {
+                    String::from(format!("{}:{}",sr.to_str(),op.to_str()))
+                },
+                _ => op.to_str()
+            }
+        }
+    }
+}
+
 impl Instruction {
     fn no_op(cmd: Command) -> Self
     {
@@ -441,8 +459,8 @@ impl Instruction {
             op1: None,
             op2: None,
             size: None,
-            lock: false
-
+            lock: false,
+            segment: None
         }
     }
     fn single_op(cmd: Command,
@@ -453,7 +471,8 @@ impl Instruction {
             op1: Some(op),
             op2: None,
             size: None,
-            lock: false
+            lock: false,
+            segment: None
         }
     }
 
@@ -466,7 +485,8 @@ impl Instruction {
             op1: Some(dst),
             op2: Some(src),
             size: None,
-            lock: false
+            lock: false,
+            segment: None
         }
     }
 
@@ -478,7 +498,8 @@ impl Instruction {
             op1: Some(Operand::Offset(offset)),
             op2: None,
             size: None,
-            lock: false
+            lock: false,
+            segment: None
         }
     }
 
@@ -492,6 +513,10 @@ impl Instruction {
         self
     }
 
+    fn set_segment(mut self, sr: SegReg) -> Self {
+        self.segment = Some(sr);
+        self
+    }
 
     fn to_str(&self) -> String {
         let mut ret = String::from("");
@@ -512,9 +537,9 @@ impl Instruction {
         };
         match self.op1 {
             Some(o1) => {
-                ret.push_str(&String::from(format!(" {}", o1.to_str())));
+                ret.push_str(&String::from(format!(" {}", maybe_prepend_segment(o1, self.segment))));
                 match self.op2 {
-                    Some(o2) => { ret.push_str(&String::from(format!(", {}", o2.to_str())));},
+                    Some(o2) => { ret.push_str(&String::from(format!(", {}", maybe_prepend_segment(o2, self.segment))));},
                     None => {;}
                 };
             },
@@ -602,7 +627,7 @@ const OPCODE_TABLE: [OpcodeTableEntry; 256] =
         OpcodeTableEntry { cmd: Command::And, opt: OpcodeParseType::RegRmWithDisp}, //0x23
         OpcodeTableEntry { cmd: Command::And, opt: OpcodeParseType::ImmAcc}, //0x24
         OpcodeTableEntry { cmd: Command::And, opt: OpcodeParseType::ImmAcc}, //0x25
-        OpcodeTableEntry { cmd: Command::Nop, opt: OpcodeParseType::Nop}, //0x26
+        OpcodeTableEntry { cmd: Command::Nop, opt: OpcodeParseType::Segment}, //0x26
         OpcodeTableEntry { cmd: Command::Daa, opt: OpcodeParseType::Direct}, //0x27
         OpcodeTableEntry { cmd: Command::Sub, opt: OpcodeParseType::RegRmWithDisp}, //0x28
         OpcodeTableEntry { cmd: Command::Sub, opt: OpcodeParseType::RegRmWithDisp}, //0x29
@@ -610,7 +635,7 @@ const OPCODE_TABLE: [OpcodeTableEntry; 256] =
         OpcodeTableEntry { cmd: Command::Sub, opt: OpcodeParseType::RegRmWithDisp}, //0x2B
         OpcodeTableEntry { cmd: Command::Sub, opt: OpcodeParseType::ImmAcc}, //0x2C
         OpcodeTableEntry { cmd: Command::Sub, opt: OpcodeParseType::ImmAcc}, //0x2D
-        OpcodeTableEntry { cmd: Command::Nop, opt: OpcodeParseType::Nop}, //0x2E
+        OpcodeTableEntry { cmd: Command::Nop, opt: OpcodeParseType::Segment}, //0x2E
         OpcodeTableEntry { cmd: Command::Das, opt: OpcodeParseType::Direct}, //0x2F
         OpcodeTableEntry { cmd: Command::Xor, opt: OpcodeParseType::RegRmWithDisp}, //0x30
         OpcodeTableEntry { cmd: Command::Xor, opt: OpcodeParseType::RegRmWithDisp}, //0x31
@@ -618,7 +643,7 @@ const OPCODE_TABLE: [OpcodeTableEntry; 256] =
         OpcodeTableEntry { cmd: Command::Xor, opt: OpcodeParseType::RegRmWithDisp}, //0x33
         OpcodeTableEntry { cmd: Command::Xor, opt: OpcodeParseType::ImmAcc}, //0x34
         OpcodeTableEntry { cmd: Command::Xor, opt: OpcodeParseType::ImmAcc}, //0x35
-        OpcodeTableEntry { cmd: Command::Nop, opt: OpcodeParseType::Nop}, //0x36
+        OpcodeTableEntry { cmd: Command::Nop, opt: OpcodeParseType::Segment}, //0x36
         OpcodeTableEntry { cmd: Command::Aaa, opt: OpcodeParseType::Direct}, //0x37
         OpcodeTableEntry { cmd: Command::Cmp, opt: OpcodeParseType::RegRmWithDisp}, //0x38
         OpcodeTableEntry { cmd: Command::Cmp, opt: OpcodeParseType::RegRmWithDisp}, //0x39
@@ -626,7 +651,7 @@ const OPCODE_TABLE: [OpcodeTableEntry; 256] =
         OpcodeTableEntry { cmd: Command::Cmp, opt: OpcodeParseType::RegRmWithDisp}, //0x3B
         OpcodeTableEntry { cmd: Command::Cmp, opt: OpcodeParseType::ImmAcc}, //0x3C
         OpcodeTableEntry { cmd: Command::Cmp, opt: OpcodeParseType::ImmAcc}, //0x3D
-        OpcodeTableEntry { cmd: Command::Nop, opt: OpcodeParseType::Nop}, //0x3E
+        OpcodeTableEntry { cmd: Command::Nop, opt: OpcodeParseType::Segment}, //0x3E
         OpcodeTableEntry { cmd: Command::Aas, opt: OpcodeParseType::Direct}, //0x3F
         OpcodeTableEntry { cmd: Command::Inc, opt: OpcodeParseType::SingleByteWithReg}, //0x40
         OpcodeTableEntry { cmd: Command::Inc, opt: OpcodeParseType::SingleByteWithReg}, //0x41
@@ -1302,6 +1327,19 @@ fn decode_lock_instruction(_cmd: Command, data: &[u8]) -> (usize, Instruction){
     (sub_len + 1, sub_inst.lock())
 }
 
+fn decode_segment_instruction(_cmd: Command, data: &[u8]) -> (usize, Instruction) {
+    use SegReg::*;
+    let sr = match data[0] {
+        0x26 => Es,
+        0x2E => Cs,
+        0x36 => Ss,
+        0x3E => Ds,
+        _ => panic!("Invalid segment prefix")
+    };
+    let (sub_len, sub_inst) = decode_instruction(&data[1..]);
+    (sub_len +1, sub_inst.set_segment(sr))
+}
+
 fn decode_instruction(data: &[u8]) -> (usize, Instruction)
 {
     let opcode = get_opcode_info(data[0]);
@@ -1324,6 +1362,7 @@ fn decode_instruction(data: &[u8]) -> (usize, Instruction)
         OpcodeParseType::Return => decode_return_instruction(opcode.cmd, data),
         OpcodeParseType::Int => decode_int_instruction(opcode.cmd, data),
         OpcodeParseType::Lock => decode_lock_instruction(opcode.cmd, data),
+        OpcodeParseType::Segment => decode_segment_instruction(opcode.cmd, data),
         OpcodeParseType::Direct => decode_direct_instruction(opcode.cmd, data),
         OpcodeParseType::Nop => panic!("Invalid opcode 0x{:x}",data[0])
     }
@@ -2695,5 +2734,17 @@ mod test {
                    (5, String::from("lock not byte [bp + 9905]")));
         assert_eq!(disassemble(&[0xf0, 0x86, 0x06, 0x64, 0x00]),
                    (5, String::from("lock xchg al, [100]")));
+    }
+
+    #[test]
+    fn test_segment_instructions() {
+        assert_eq!(disassemble(&[0x2e, 0x8a, 0x00]),
+                   (3, String::from("mov al, cs:[bx + si]")));
+        assert_eq!(disassemble(&[0x3e, 0x8b, 0x1b]),
+                   (3, String::from("mov bx, ds:[bp + di]")));
+        assert_eq!(disassemble(&[0x26, 0x8b, 0x56, 0x00]),
+                   (4, String::from("mov dx, es:[bp]")));
+        assert_eq!(disassemble(&[0x36, 0x8a, 0x60, 0x04]),
+                   (4, String::from("mov ah, ss:[bx + si + 4]")));
     }
 }
