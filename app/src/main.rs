@@ -40,7 +40,8 @@ enum OpcodeParseType
     ImmRm,
     AccMem,
     ImmAcc,
-    Jump,
+    JumpI8,
+    JumpI16,
     RmWithDisp,
     ShiftRot,
     SingleByteWithReg,
@@ -210,7 +211,8 @@ enum Operand{
     ImmI16(i16),
     PtrDisp((AdrReg, i16)),
     PtrDir(u16),
-    Offset(i8),
+    Offset8(i8),
+    Offset16(i16),
     RepeatOperand(RepeatOperand)
 }
 
@@ -427,7 +429,10 @@ impl Operand {
                     }
                 }
             },
-            Offset(offset) => {
+            Offset8(offset) => {
+                String::from(format!("{} {}", OFFSET_STR, offset))
+            },
+            Offset16(offset) => {
                 String::from(format!("{} {}", OFFSET_STR, offset))
             },
             RepeatOperand(op) => {
@@ -484,11 +489,19 @@ impl Instruction {
         ret
     }
 
-    fn jump(cmd: Command,
+    fn jumpi8(cmd: Command,
             offset: i8) -> Self
     {
         let mut ret = Self::no_op(cmd);
-        ret.op1 = Some(Operand::Offset(offset));
+        ret.op1 = Some(Operand::Offset8(offset));
+        ret
+    }
+
+    fn jumpi16(cmd: Command,
+            offset: i16) -> Self
+    {
+        let mut ret = Self::no_op(cmd);
+        ret.op1 = Some(Operand::Offset16(offset));
         ret
     }
 
@@ -701,22 +714,22 @@ const OPCODE_TABLE: [OpcodeTableEntry; 256] =
         OpcodeTableEntry { cmd: Command::Nop, opt: OpcodeParseType::Nop}, //0x6D
         OpcodeTableEntry { cmd: Command::Nop, opt: OpcodeParseType::Nop}, //0x6E
         OpcodeTableEntry { cmd: Command::Nop, opt: OpcodeParseType::Nop}, //0x6F
-        OpcodeTableEntry { cmd: Command::Jo, opt: OpcodeParseType::Jump}, //0x70
-        OpcodeTableEntry { cmd: Command::Jno, opt: OpcodeParseType::Jump}, //0x71
-        OpcodeTableEntry { cmd: Command::Jb, opt: OpcodeParseType::Jump}, //0x72
-        OpcodeTableEntry { cmd: Command::Jnb, opt: OpcodeParseType::Jump}, //0x73
-        OpcodeTableEntry { cmd: Command::Je, opt: OpcodeParseType::Jump}, //0x74
-        OpcodeTableEntry { cmd: Command::Jnz, opt: OpcodeParseType::Jump}, //0x75
-        OpcodeTableEntry { cmd: Command::Jbe, opt: OpcodeParseType::Jump}, //0x76
-        OpcodeTableEntry { cmd: Command::Ja, opt: OpcodeParseType::Jump}, //0x77
-        OpcodeTableEntry { cmd: Command::Js, opt: OpcodeParseType::Jump}, //0x78
-        OpcodeTableEntry { cmd: Command::Jns, opt: OpcodeParseType::Jump}, //0x79
-        OpcodeTableEntry { cmd: Command::Jp, opt: OpcodeParseType::Jump}, //0x7A
-        OpcodeTableEntry { cmd: Command::Jnp, opt: OpcodeParseType::Jump}, //0x7B
-        OpcodeTableEntry { cmd: Command::Jl, opt: OpcodeParseType::Jump}, //0x7C
-        OpcodeTableEntry { cmd: Command::Jnl, opt: OpcodeParseType::Jump}, //0x7D
-        OpcodeTableEntry { cmd: Command::Jle, opt: OpcodeParseType::Jump}, //0x7E
-        OpcodeTableEntry { cmd: Command::Jg, opt: OpcodeParseType::Jump}, //0x7F
+        OpcodeTableEntry { cmd: Command::Jo, opt: OpcodeParseType::JumpI8}, //0x70
+        OpcodeTableEntry { cmd: Command::Jno, opt: OpcodeParseType::JumpI8}, //0x71
+        OpcodeTableEntry { cmd: Command::Jb, opt: OpcodeParseType::JumpI8}, //0x72
+        OpcodeTableEntry { cmd: Command::Jnb, opt: OpcodeParseType::JumpI8}, //0x73
+        OpcodeTableEntry { cmd: Command::Je, opt: OpcodeParseType::JumpI8}, //0x74
+        OpcodeTableEntry { cmd: Command::Jnz, opt: OpcodeParseType::JumpI8}, //0x75
+        OpcodeTableEntry { cmd: Command::Jbe, opt: OpcodeParseType::JumpI8}, //0x76
+        OpcodeTableEntry { cmd: Command::Ja, opt: OpcodeParseType::JumpI8}, //0x77
+        OpcodeTableEntry { cmd: Command::Js, opt: OpcodeParseType::JumpI8}, //0x78
+        OpcodeTableEntry { cmd: Command::Jns, opt: OpcodeParseType::JumpI8}, //0x79
+        OpcodeTableEntry { cmd: Command::Jp, opt: OpcodeParseType::JumpI8}, //0x7A
+        OpcodeTableEntry { cmd: Command::Jnp, opt: OpcodeParseType::JumpI8}, //0x7B
+        OpcodeTableEntry { cmd: Command::Jl, opt: OpcodeParseType::JumpI8}, //0x7C
+        OpcodeTableEntry { cmd: Command::Jnl, opt: OpcodeParseType::JumpI8}, //0x7D
+        OpcodeTableEntry { cmd: Command::Jle, opt: OpcodeParseType::JumpI8}, //0x7E
+        OpcodeTableEntry { cmd: Command::Jg, opt: OpcodeParseType::JumpI8}, //0x7F
         OpcodeTableEntry { cmd: Command::Nop, opt: OpcodeParseType::ImmRm}, //0x80
         OpcodeTableEntry { cmd: Command::Nop, opt: OpcodeParseType::ImmRm}, //0x81
         OpcodeTableEntry { cmd: Command::Nop, opt: OpcodeParseType::ImmRm}, //0x82
@@ -813,16 +826,16 @@ const OPCODE_TABLE: [OpcodeTableEntry; 256] =
         OpcodeTableEntry { cmd: Command::Nop, opt: OpcodeParseType::Nop}, //0xDD
         OpcodeTableEntry { cmd: Command::Nop, opt: OpcodeParseType::Nop}, //0xDE
         OpcodeTableEntry { cmd: Command::Nop, opt: OpcodeParseType::Nop}, //0xDF
-        OpcodeTableEntry { cmd: Command::Loopnz, opt: OpcodeParseType::Jump}, //0xE0
-        OpcodeTableEntry { cmd: Command::Loopz, opt: OpcodeParseType::Jump}, //0xE1
-        OpcodeTableEntry { cmd: Command::Loop, opt: OpcodeParseType::Jump}, //0xE2
-        OpcodeTableEntry { cmd: Command::Jcxz, opt: OpcodeParseType::Jump}, //0xE3
+        OpcodeTableEntry { cmd: Command::Loopnz, opt: OpcodeParseType::JumpI8}, //0xE0
+        OpcodeTableEntry { cmd: Command::Loopz, opt: OpcodeParseType::JumpI8}, //0xE1
+        OpcodeTableEntry { cmd: Command::Loop, opt: OpcodeParseType::JumpI8}, //0xE2
+        OpcodeTableEntry { cmd: Command::Jcxz, opt: OpcodeParseType::JumpI8}, //0xE3
         OpcodeTableEntry { cmd: Command::In, opt: OpcodeParseType::InOut}, //0xE4
         OpcodeTableEntry { cmd: Command::In, opt: OpcodeParseType::InOut}, //0xE5
         OpcodeTableEntry { cmd: Command::Out, opt: OpcodeParseType::InOut}, //0xE6
         OpcodeTableEntry { cmd: Command::Out, opt: OpcodeParseType::InOut}, //0xE7
-        OpcodeTableEntry { cmd: Command::Nop, opt: OpcodeParseType::Nop}, //0xE8
-        OpcodeTableEntry { cmd: Command::Nop, opt: OpcodeParseType::Nop}, //0xE9
+        OpcodeTableEntry { cmd: Command::Call, opt: OpcodeParseType::JumpI16}, //0xE8
+        OpcodeTableEntry { cmd: Command::Jmp, opt: OpcodeParseType::JumpI16}, //0xE9
         OpcodeTableEntry { cmd: Command::Jmp, opt: OpcodeParseType::Intersegment}, //0xEA
         OpcodeTableEntry { cmd: Command::Nop, opt: OpcodeParseType::Nop}, //0xEB
         OpcodeTableEntry { cmd: Command::In, opt: OpcodeParseType::InOut}, //0xEC
@@ -1161,9 +1174,14 @@ fn decode_reg_rm_with_disp_instruction_d1w1(cmd: Command, data: &[u8]) -> (usize
     decode_reg_rm_strings_with_indicated_dw(cmd, data, BitValue::BV1, BitValue::BV1)
 }
 
-fn decode_jmp_instruction(cmd: Command, data: &[u8]) -> (usize, Instruction) {
+fn decode_jmp_i8_instruction(cmd: Command, data: &[u8]) -> (usize, Instruction) {
     let jump_offset: i8 = data[1] as i8;
-    (2, Instruction::jump(cmd, jump_offset))
+    (2, Instruction::jumpi8(cmd, jump_offset))
+}
+
+fn decode_jmp_i16_instruction(cmd: Command, data: &[u8]) -> (usize, Instruction) {
+    let jump_offset: i16 = read_i16_val(&data[1..3]);
+    (3, Instruction::jumpi16(cmd, jump_offset))
 }
 
 fn decode_shift_rot_instruction(_cmd: Command, data: &[u8]) -> (usize, Instruction) {
@@ -1360,7 +1378,8 @@ fn decode_instruction(data: &[u8]) -> (usize, Instruction)
         OpcodeParseType::ImmAcc =>  decode_imm_acc_instruction(opcode.cmd, data),
         OpcodeParseType::RmWithDisp => decode_rm_with_disp_instruction(opcode.cmd, data),
         OpcodeParseType::ShiftRot => decode_shift_rot_instruction(opcode.cmd, data),
-        OpcodeParseType::Jump => decode_jmp_instruction(opcode.cmd, data),
+        OpcodeParseType::JumpI8 => decode_jmp_i8_instruction(opcode.cmd, data),
+        OpcodeParseType::JumpI16 => decode_jmp_i16_instruction(opcode.cmd, data),
         OpcodeParseType::SingleByteWithSr  => decode_single_byte_instruction_with_sr(opcode.cmd, data),
         OpcodeParseType::SingleByteWithReg => decode_single_byte_instruction_with_reg(opcode.cmd, data),
         OpcodeParseType::InOut => decode_inout_instruction(opcode.cmd, data),
@@ -1501,7 +1520,7 @@ mod test {
                                         Operand::PtrDir(3458),
                                         Operand::Reg(Reg::Bx)).to_str(),
                   "mov bx, [3458]");
-        assert_eq!(Instruction::jump(Command::Jnz, -2).to_str(),
+        assert_eq!(Instruction::jumpi8(Command::Jnz, -2).to_str(),
                    format!("jnz {} -2", OFFSET_STR));
         assert_eq!(Instruction::src_dst(Command::Add,
                                         Operand::PtrDisp((AdrReg::BxSi, 0)),
@@ -2772,5 +2791,13 @@ mod test {
                    (5, String::from("call 123:456")));
         assert_eq!(disassemble(&[0xea, 0x22, 0x00, 0x15, 0x03]),
                    (5, String::from("jmp 789:34")));
+    }
+
+    #[test]
+    fn test_direct_within_segment_calls() {
+        assert_eq!(disassemble(&[0xe9, 0x39, 0x0a]),
+                   (3, String::from("jmp #OFFSET# 2617")));
+        assert_eq!(disassemble(&[0xe8, 0x16, 0x2e]),
+                   (3, String::from("call #OFFSET# 11798")));
     }
 }
