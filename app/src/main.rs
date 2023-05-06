@@ -356,12 +356,32 @@ enum Size
 struct Instruction
 {
     cmd: Command,
-    size: Option<Size>,
     op1: Option<Operand>,
     op2: Option<Operand>,
+    size: Option<Size>
 }
 
 impl Instruction {
+    fn no_op(cmd: Command) -> Self
+    {
+        Instruction {
+            cmd: cmd,
+            op1: None,
+            op2: None,
+            size: None
+        }
+    }
+    fn single_op(cmd: Command,
+                 op: Operand) -> Self
+    {
+        Instruction {
+            cmd: cmd,
+            op1: Some(op),
+            op2: None,
+            size: None
+        }
+    }
+
     fn src_dst(cmd: Command,
                 src: Operand,
                 dst: Operand) -> Self
@@ -1361,9 +1381,18 @@ mod test {
                                         Operand::Ptr((AdrReg::BpDi, 0))).size(Size::Word)
                    .to_str(),
                    "mov word [bp + di], 7");
-        // assert_eq!(Instruction::single_op(Command::Push,
-        //                                   Operand::Reg(Reg::Cx)).to_str(),
-        //            "push cx")
+        assert_eq!(Instruction::single_op(Command::Push,
+                                          Operand::Reg(Reg::Cx)).to_str(),
+                   "push cx");
+        assert_eq!(Instruction::single_op(Command::Push,
+                                          Operand::Ptr((AdrReg::BxDi, -30)))
+                   .size(Size::Word)
+                   .to_str(),
+                   "push word [bx + di - 30]");
+
+        assert_eq!(Instruction::no_op(Command::Xlat).to_str(),
+                   "xlat")
+
     }
 
     #[test]
