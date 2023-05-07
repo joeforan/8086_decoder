@@ -40,6 +40,7 @@ enum OpcodeParseType
     ImmRm,
     AccMem,
     ImmAcc,
+    MovWithSr,
     JumpI8,
     JumpI16,
     RmWithDisp,
@@ -596,6 +597,9 @@ const MOD_SHFT: u8 = 6;
 const REG_MASK: u8 = 0x38;
 const REG_SHFT: u8 = 3;
 
+const SR_MASK: u8 = 0x18;
+const SR_SHFT: u8 = 3;
+
 const IMMREG_MASK: u8 = 0x07;
 const IMMREG_SHFT: u8 = 0;
 
@@ -754,9 +758,9 @@ const OPCODE_TABLE: [OpcodeTableEntry; 256] =
         OpcodeTableEntry { cmd: Command::Mov, opt: OpcodeParseType::RegRmWithDisp}, //0x89
         OpcodeTableEntry { cmd: Command::Mov, opt: OpcodeParseType::RegRmWithDisp}, //0x8A
         OpcodeTableEntry { cmd: Command::Mov, opt: OpcodeParseType::RegRmWithDisp}, //0x8B
-        OpcodeTableEntry { cmd: Command::Nop, opt: OpcodeParseType::Nop}, //0x8C
+        OpcodeTableEntry { cmd: Command::Mov, opt: OpcodeParseType::MovWithSr}, //0x8C
         OpcodeTableEntry { cmd: Command::Lea, opt: OpcodeParseType::RegRmWithDispD1}, //0x8D
-        OpcodeTableEntry { cmd: Command::Nop, opt: OpcodeParseType::Nop}, //0x8E
+        OpcodeTableEntry { cmd: Command::Mov, opt: OpcodeParseType::MovWithSr}, //0x8E
         OpcodeTableEntry { cmd: Command::Nop, opt: OpcodeParseType::RmWithDisp}, //0x8F
         OpcodeTableEntry { cmd: Command::Xchg, opt: OpcodeParseType::SingleByteWithReg}, //0x90
         OpcodeTableEntry { cmd: Command::Xchg, opt: OpcodeParseType::SingleByteWithReg}, //0x91
@@ -1186,6 +1190,21 @@ fn decode_reg_rm_with_disp_instruction_d1w1(cmd: Command, data: &[u8]) -> (usize
     decode_reg_rm_strings_with_indicated_dw(cmd, data, BitValue::BV1, BitValue::BV1)
 }
 
+fn decode_mov_with_sr_instruction(cmd: Command, data: &[u8]) -> (usize, Instruction) {
+    let sr_code = get_two_bit_value((data[1] & SR_MASK) >> SR_SHFT);
+    let seg_reg_operand = get_seg_reg_operand(sr_code);
+
+    let mod_code = get_two_bit_value((data[1] & MOD_MASK) >> MOD_SHFT);
+    let rm_code = get_three_bit_value((data[1] & RM_MASK) >> RM_SHFT);
+    let t = get_mem_ptr_and_displacement(data, rm_code, mod_code);
+
+    (t.0 + 2, if (data[0] & 0x2) == 0x2 {
+        Instruction::src_dst(cmd, t.1, seg_reg_operand)
+    } else {
+        Instruction::src_dst(cmd, seg_reg_operand, t.1)
+    })
+}
+
 fn decode_jmp_i8_instruction(cmd: Command, data: &[u8]) -> (usize, Instruction) {
     let jump_offset: i8 = data[1] as i8;
     (2, Instruction::jumpi8(cmd, jump_offset))
@@ -1390,6 +1409,7 @@ fn decode_instruction(data: &[u8]) -> (usize, Instruction)
         OpcodeParseType::ImmRm => decode_imm_rm_instruction(opcode.cmd, data),
         OpcodeParseType::AccMem =>  decode_acc_mem_instruction(opcode.cmd, data),
         OpcodeParseType::ImmAcc =>  decode_imm_acc_instruction(opcode.cmd, data),
+        OpcodeParseType::MovWithSr => decode_mov_with_sr_instruction(opcode.cmd, data),
         OpcodeParseType::RmWithDisp => decode_rm_with_disp_instruction(opcode.cmd, data),
         OpcodeParseType::ShiftRot => decode_shift_rot_instruction(opcode.cmd, data),
         OpcodeParseType::JumpI8 => decode_jmp_i8_instruction(opcode.cmd, data),
@@ -2789,6 +2809,10 @@ mod test {
                    (4, String::from("mov dx, es:[bp]")));
         assert_eq!(disassemble(&[0x36, 0x8a, 0x60, 0x04]),
                    (4, String::from("mov ah, ss:[bx + si + 4]")));
+        assert_eq!(disassemble(&[0x8c, 0x40, 0x3b]),
+                   (3, String::from("mov [bx + si + 59], es")));
+        assert_eq!(disassemble(&[0x8e, 0x8a, 0x40, 0xf7]),
+                   (4, String::from("mov cs, [bp + si - 2240]")));
     }
 
     #[test]
