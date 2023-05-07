@@ -49,8 +49,10 @@ enum OpcodeParseType
     InOut,
     AsciiAdjust,
     Repeat,
-    Return,
-    Int,
+    ImmU8,
+//    ImmI8,
+  //  ImmU16,
+    ImmI16,
     Lock,
     Segment,
     Intersegment,
@@ -90,6 +92,7 @@ enum Command {
     Call,
     Jmp,
     Ret,
+    Retf,
     Je,
     Jl,
     Jle,
@@ -325,7 +328,7 @@ impl Command {
             Hlt => "hlt",
             Wait => "wait",
             Lock => "lock",
-            //Retf => "retf",
+            Retf => "retf",
             Nop => "nop"
         }
     }
@@ -796,18 +799,18 @@ const OPCODE_TABLE: [OpcodeTableEntry; 256] =
         OpcodeTableEntry { cmd: Command::Mov, opt: OpcodeParseType::ImmReg}, //0xBF
         OpcodeTableEntry { cmd: Command::Nop, opt: OpcodeParseType::Nop}, //0xC0
         OpcodeTableEntry { cmd: Command::Nop, opt: OpcodeParseType::Nop}, //0xC1
-        OpcodeTableEntry { cmd: Command::Ret, opt: OpcodeParseType::Return}, //0xC2
-        OpcodeTableEntry { cmd: Command::Ret, opt: OpcodeParseType::Return}, //0xC3
+        OpcodeTableEntry { cmd: Command::Ret, opt: OpcodeParseType::ImmI16}, //0xC2
+        OpcodeTableEntry { cmd: Command::Ret, opt: OpcodeParseType::Direct}, //0xC3
         OpcodeTableEntry { cmd: Command::Les, opt: OpcodeParseType::RegRmWithDispD1W1}, //0xC4
         OpcodeTableEntry { cmd: Command::Lds, opt: OpcodeParseType::RegRmWithDispD1}, //0xC5
         OpcodeTableEntry { cmd: Command::Mov, opt: OpcodeParseType::ImmRm}, //0xC6
         OpcodeTableEntry { cmd: Command::Mov, opt: OpcodeParseType::ImmRm}, //0xC7
         OpcodeTableEntry { cmd: Command::Nop, opt: OpcodeParseType::Nop}, //0xC8
         OpcodeTableEntry { cmd: Command::Nop, opt: OpcodeParseType::Nop}, //0xC9
-        OpcodeTableEntry { cmd: Command::Nop, opt: OpcodeParseType::Nop}, //0xCA
-        OpcodeTableEntry { cmd: Command::Nop, opt: OpcodeParseType::Nop}, //0xCB
+        OpcodeTableEntry { cmd: Command::Retf, opt: OpcodeParseType::ImmI16}, //0xCA
+        OpcodeTableEntry { cmd: Command::Retf, opt: OpcodeParseType::Direct}, //0xCB
         OpcodeTableEntry { cmd: Command::Int3, opt: OpcodeParseType::Direct}, //0xCC
-        OpcodeTableEntry { cmd: Command::Int, opt: OpcodeParseType::Int}, //0xCD
+        OpcodeTableEntry { cmd: Command::Int, opt: OpcodeParseType::ImmU8}, //0xCD
         OpcodeTableEntry { cmd: Command::Into, opt: OpcodeParseType::Direct}, //0xCE
         OpcodeTableEntry { cmd: Command::Iret, opt: OpcodeParseType::Direct}, //0xCF
         OpcodeTableEntry { cmd: Command::Nop, opt: OpcodeParseType::ShiftRot}, //0xD0
@@ -1324,16 +1327,19 @@ fn decode_repeat_instruction(cmd: Command, data: &[u8]) -> (usize, Instruction) 
     (2, Instruction::single_op(cmd, repeat_operand_from_byte(data[1])))
 }
 
-fn decode_return_instruction(cmd: Command, data: &[u8]) -> (usize, Instruction) {
-    use BitValue::*;
-    match get_bit_value(data[0] & 0x1) {
-        BV0 => (3, Instruction::single_op(cmd, Operand::ImmI16(read_i16_val(&data[1..3])))),
-        BV1 => (1, Instruction::no_op(cmd))
-    }
-}
-
-fn decode_int_instruction(cmd: Command, data: &[u8]) -> (usize, Instruction) {
+fn decode_instruction_with_imm_u8(cmd: Command, data: &[u8]) -> (usize, Instruction) {
     (2, Instruction::single_op(cmd, Operand::ImmU8(data[1])))
+}
+// fn decode_instruction_with_imm_i8(cmd: Command, data: &[u8]) -> (usize, Instruction) {
+//     (2, Instruction::single_op(cmd, Operand::ImmI8(data[1] as i8)))
+// }
+
+// fn decode_instruction_with_imm_u16(cmd: Command, data: &[u8]) -> (usize, Instruction) {
+//     (3, Instruction::single_op(cmd, Operand::ImmU16(read_u16_val(&data[1..3]))))
+// }
+
+fn decode_instruction_with_imm_i16(cmd: Command, data: &[u8]) -> (usize, Instruction) {
+    (3, Instruction::single_op(cmd, Operand::ImmI16(read_i16_val(&data[1..3]))))
 }
 
 fn decode_direct_instruction(cmd: Command, _data: &[u8]) -> (usize, Instruction) {
@@ -1385,8 +1391,10 @@ fn decode_instruction(data: &[u8]) -> (usize, Instruction)
         OpcodeParseType::InOut => decode_inout_instruction(opcode.cmd, data),
         OpcodeParseType::AsciiAdjust => decode_ascii_adjust_instruction(opcode.cmd, data),
         OpcodeParseType::Repeat => decode_repeat_instruction(opcode.cmd, data),
-        OpcodeParseType::Return => decode_return_instruction(opcode.cmd, data),
-        OpcodeParseType::Int => decode_int_instruction(opcode.cmd, data),
+        OpcodeParseType::ImmU8 => decode_instruction_with_imm_u8(opcode.cmd, data),
+        // OpcodeParseType::ImmI8 => decode_instruction_with_imm_i8(opcode.cmd, data),
+        // OpcodeParseType::ImmU16 => decode_instruction_with_imm_u16(opcode.cmd, data),
+        OpcodeParseType::ImmI16 => decode_instruction_with_imm_i16(opcode.cmd, data),
         OpcodeParseType::Intersegment => decode_intersegment_instruction(opcode.cmd, data),
         OpcodeParseType::Lock => decode_lock_instruction(opcode.cmd, data),
         OpcodeParseType::Segment => decode_segment_instruction(opcode.cmd, data),
@@ -2799,5 +2807,17 @@ mod test {
                    (3, String::from("jmp #OFFSET# 2617")));
         assert_eq!(disassemble(&[0xe8, 0x16, 0x2e]),
                    (3, String::from("call #OFFSET# 11798")));
+    }
+
+    #[test]
+    fn test_ret_retf_instructions() {
+        assert_eq!(disassemble(&[0xca, 0x94, 0x44]),
+                   (3, String::from("retf 17556")));
+        assert_eq!(disassemble(&[0xc2, 0x98, 0x44]),
+                   (3, String::from("ret 17560")));
+        assert_eq!(disassemble(&[0xcb]),
+                   (1, String::from("retf")));
+        assert_eq!(disassemble(&[0xc3]),
+                   (1, String::from("ret")));
     }
 }
