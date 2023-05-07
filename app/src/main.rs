@@ -566,10 +566,10 @@ impl Instruction {
                             ret.push_str(&String::from(format!(", {}", maybe_prepend_segment(o2, self.segment))));
                         }
                     },
-                    None => {;}
+                    None => {}
                 }
             },
-            None => {;}
+            None => {}
         }
         ret
     }
@@ -1458,7 +1458,7 @@ fn decode_from_data(data: &[u8]) -> String {
 
         let (codestr, dst) = match code.find(OFFSET_STR) {
             Some(idx) => {
-                let mut modified_line = String::from(&code[0..idx]);
+                let modified_line = String::from(&code[0..idx]);
                 let jump_offset: i8 = code[idx+9..].parse::<i8>().unwrap();
                 let jump_address: usize = (i as isize + offset as isize + jump_offset as isize) as usize;
                 labels.insert(jump_address);
