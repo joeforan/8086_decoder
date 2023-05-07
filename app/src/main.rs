@@ -234,8 +234,8 @@ struct Instruction
     size: Option<DataSize>,
     lock: bool,
     segment: Option<SegReg>,
-    is_intersegment: bool
-
+    is_intersegment: bool,
+    is_far: bool
 }
 
 impl Command {
@@ -472,7 +472,8 @@ impl Instruction {
             size: None,
             lock: false,
             segment: None,
-            is_intersegment: false
+            is_intersegment: false,
+            is_far: false
         }
     }
     fn single_op(cmd: Command,
@@ -528,6 +529,11 @@ impl Instruction {
         self
     }
 
+    fn set_far(mut self) -> Self {
+        self.is_far = true;
+        self
+    }
+
     fn to_str(&self) -> String {
         let mut ret = String::from("");
 
@@ -545,6 +551,9 @@ impl Instruction {
                 }
             }
         };
+        if self.is_far {
+            ret.push_str(" far")
+        }
         match self.op1 {
             Some(o1) => {
                 ret.push_str(&String::from(format!(" {}", maybe_prepend_segment(o1, self.segment))));
@@ -1230,45 +1239,40 @@ fn decode_rm_with_disp_instruction(_cmd: Command, data: &[u8]) -> (usize, Instru
     use BitValue::*;
     use TwoBitValue::*;
     use ThreeBitValue::*;
-    let (use_w_flag, sub_cmd) = {
+    let (use_w_flag, use_far, sub_cmd) = {
         match get_three_bit_value((data[1] & SUB_CODE_MASK) >> SUB_CODE_SHFT) {
             TBV000 => {
                 if data[0] == 0x8F {
-                    (true, Pop)
+                    (true, false, Pop)
                 } else if (data[0] &  0xFE) == 0xFE {
-                    (true, Inc)
+                    (true, false, Inc)
                 } else if (data[0] & 0xFE) == 0xF6 {
                     return decode_imm_rm_instruction(Test, data);
                 } else {
                     panic!("unknown opcode/subcode")
                 }
             },
-            TBV001 => (true, Dec),
-            TBV010 => {
-                if data[0] == 0xFF { (false, Call) } else { (true, Not)}
-            },
-            TBV011 => (true, Neg),
-            TBV100 => {if  data[0] == 0xFF {(false, Jmp)} else {(true, Mul)}},
-            TBV101 => (true, Imul),
+            TBV001 => (true, false, Dec),
+            TBV010 => {if data[0] == 0xFF { (false, false, Call) } else { (true, false, Not)}},
+            TBV011 => {if data[0] == 0xFF { (false, true, Call) } else { (true, false, Neg) }},
+            TBV100 => {if data[0] == 0xFF { (false, false, Jmp) } else { (true, false, Mul) }},
+            TBV101 => {if data[0] == 0xFF { (false, true, Jmp) } else { (true, false, Imul) }},
             TBV110 => {
                 if data[0] == 0xFF {
-                    (true, Push)
+                    (true, false, Push)
                 } else if (data[0] & 0xFE) == 0xF6 {
-                    (true, Div)
+                    (true, false, Div)
                 } else {
                     panic!("unknwon opcode/subcode")
                 }
             }
-            TBV111 => (true, IDiv),
+            TBV111 => (true, false, IDiv),
         }
     };
 
     let mod_code = get_two_bit_value((data[1] & MOD_MASK) >> MOD_SHFT);
     let rm_code = get_three_bit_value((data[1] & RM_MASK) >> RM_SHFT);
     let t = get_mem_ptr_and_displacement(data, rm_code, mod_code);
-
-
-
 
     if use_w_flag && (mod_code != DBV11) {
         let w_flag = get_bit_value((data[0] & W_MASK) >> W_SHFT);
@@ -1278,7 +1282,11 @@ fn decode_rm_with_disp_instruction(_cmd: Command, data: &[u8]) -> (usize, Instru
         };
         (2 + t.0, Instruction::single_op(sub_cmd, t.1).size(size))
     } else {
-        (2 + t.0, Instruction::single_op(sub_cmd, t.1))
+        if use_far {
+            (2 + t.0, Instruction::single_op(sub_cmd, t.1).set_far())
+        } else {
+            (2 + t.0, Instruction::single_op(sub_cmd, t.1))
+        }
     }
 }
 
@@ -2828,10 +2836,11 @@ mod test {
         assert_eq!(disassemble(&[0xff, 0x5a, 0xc6]),
                    (3, String::from("call far [bp + si - 58]")));
         assert_eq!(disassemble(&[0xff, 0x25]),
-                   (1, String::from("jmp [di]")));
+                   (2, String::from("jmp [di]")));
         assert_eq!(disassemble(&[0xff, 0x2d]),
-                   (1, String::from("jmp far [di]")));
+                   (2, String::from("jmp far [di]")));
+        assert_eq!(disassemble(&[0xea, 0x88, 0x77, 0x66, 0x55]),
+                   (5, String::from("jmp 21862:30600")));
 
     }
-
 }
