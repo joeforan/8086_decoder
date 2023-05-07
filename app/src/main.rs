@@ -1458,8 +1458,8 @@ fn decode_from_data(data: &[u8]) -> String {
 
         let (codestr, dst) = match code.find(OFFSET_STR) {
             Some(idx) => {
-                let mut modified_line = String::from(&code[0..idx]);
-                let jump_offset: i8 = code[idx+9..].parse::<i8>().unwrap();
+                let modified_line = String::from(&code[0..idx]);
+                let jump_offset: i16 = code[idx+9..].parse::<i16>().unwrap();
                 let jump_address: usize = (i as isize + offset as isize + jump_offset as isize) as usize;
                 labels.insert(jump_address);
                 (modified_line, Some(jump_address))
@@ -2835,6 +2835,8 @@ mod test {
 
     #[test]
     fn test_direct_within_segment_calls() {
+        assert_eq!(disassemble(&[0xe9, 0xd9, 0x06]),
+                   (3, String::from("jmp #OFFSET# 1753")));
         assert_eq!(disassemble(&[0xe9, 0x39, 0x0a]),
                    (3, String::from("jmp #OFFSET# 2617")));
         assert_eq!(disassemble(&[0xe8, 0x16, 0x2e]),
