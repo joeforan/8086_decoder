@@ -960,10 +960,10 @@ fn get_reg_operand(flag: BitValue,
     )
 }
 
-fn repeat_operand_from_byte(byte: u8) -> Operand
+fn repeat_operand_from_byte(byte: u8) -> Result<Operand, String>
 {
     use RepeatOperand::*;
-    Operand::RepeatOperand(
+    let op = Operand::RepeatOperand(
         match byte {
             0xA4 => Movsb,
             0xA5 => Movsw,
@@ -975,8 +975,10 @@ fn repeat_operand_from_byte(byte: u8) -> Operand
             0xAD => Lodsw,
             0xAE => Scasb,
             0xAF => Scasw,
-            _ => panic!("Unknown repeat operand byte: {}", byte)
-    })
+            _ => { return Err(String::from(format!("Unknown repeat operand byte: {}", byte))); }
+        });
+    Ok(op)
+
 }
 
 fn get_mem_ptr_and_displacement(data: &[u8],
@@ -1021,7 +1023,7 @@ fn get_mem_ptr_and_displacement(data: &[u8],
     }
 }
 
-fn decode_imm_reg_instruction(cmd: Command, data: &[u8]) -> (usize, Instruction) {
+fn decode_imm_reg_instruction(cmd: Command, data: &[u8]) -> Result<(usize, Instruction), String> {
     let immw_flag = get_bit_value((data[0] & IMMW_MASK) >> IMMW_SHFT);
     let immreg_code = get_three_bit_value((data[0] & IMMREG_MASK) >> IMMREG_SHFT);
     let immreg_operand = get_reg_operand(immw_flag, immreg_code);
@@ -1030,10 +1032,10 @@ fn decode_imm_reg_instruction(cmd: Command, data: &[u8]) -> (usize, Instruction)
         BitValue::BV0 => (2, Operand::ImmI8(data[1] as i8)),
         BitValue::BV1 => (3, Operand::ImmI16(read_i16_val(&data[1..3])))
     };
-    (offset, Instruction::src_dst(cmd, src, immreg_operand))
+    Ok((offset, Instruction::src_dst(cmd, src, immreg_operand)))
 }
 
-fn decode_imm_rm_instruction(cmd: Command, data: &[u8]) -> (usize, Instruction) {
+fn decode_imm_rm_instruction(cmd: Command, data: &[u8]) -> Result<(usize, Instruction), String> {
     use BitValue::*;
     use TwoBitValue::*;
     use ThreeBitValue::*;
@@ -1069,27 +1071,27 @@ fn decode_imm_rm_instruction(cmd: Command, data: &[u8]) -> (usize, Instruction) 
 
         if (data[0] & 0xFE) == 0xC6 {
             return match w_flag {
-                BV0 =>  (data_offset + 3, Instruction::src_dst(sub_code, Operand::ImmU8(data[data_idx]), reg_operand).size(DataSize::Byte)),
-                BV1 =>  (data_offset + 4, Instruction::src_dst(sub_code, Operand::ImmU16(read_u16_val(&data[data_idx..data_idx+2])),
-                                                                reg_operand).size(DataSize::Word))
+                BV0 =>  Ok((data_offset + 3, Instruction::src_dst(sub_code, Operand::ImmU8(data[data_idx]), reg_operand).size(DataSize::Byte))),
+                BV1 =>  Ok((data_offset + 4, Instruction::src_dst(sub_code, Operand::ImmU16(read_u16_val(&data[data_idx..data_idx+2])),
+                                                                reg_operand).size(DataSize::Word)))
             }
         } else {
             return match w_flag {
-                BV0 =>  (data_offset + 3,
-                         Instruction::src_dst(sub_code, Operand::ImmU8(data[data_idx]), reg_operand).size(DataSize::Byte)),
+                BV0 =>  Ok((data_offset + 3,
+                            Instruction::src_dst(sub_code, Operand::ImmU8(data[data_idx]), reg_operand).size(DataSize::Byte))),
                 BV1 =>  {
                     if use_s_flag {
                         let s_flag = (data[0] & S_MASK) >> S_SHFT;
                         if s_flag == 0 {
-                            (data_offset + 4,
-                             Instruction::src_dst(sub_code, Operand::ImmU16(read_u16_val(&data[data_idx..data_idx+2])), reg_operand).size(DataSize::Word))
+                            Ok((data_offset + 4,
+                                Instruction::src_dst(sub_code, Operand::ImmU16(read_u16_val(&data[data_idx..data_idx+2])), reg_operand).size(DataSize::Word)))
                         } else {
-                            (data_offset + 3,
-                             Instruction::src_dst(sub_code, Operand::ImmU8(data[data_idx]), reg_operand).size(DataSize::Word))
+                            Ok((data_offset + 3,
+                                Instruction::src_dst(sub_code, Operand::ImmU8(data[data_idx]), reg_operand).size(DataSize::Word)))
                         }
                     } else {
-                        (data_offset + 4,
-                         Instruction::src_dst(sub_code, Operand::ImmU16(read_u16_val(&data[data_idx..data_idx+2])), reg_operand).size(DataSize::Word))
+                        Ok((data_offset + 4,
+                            Instruction::src_dst(sub_code, Operand::ImmU16(read_u16_val(&data[data_idx..data_idx+2])), reg_operand).size(DataSize::Word)))
                     }
                 }
             }
@@ -1098,24 +1100,22 @@ fn decode_imm_rm_instruction(cmd: Command, data: &[u8]) -> (usize, Instruction) 
         let rm_operand = get_reg_operand(w_flag, rm_code);
         let data_idx: usize = 2;
         if cmd == Mov {
-            (3,
-             Instruction::src_dst(cmd,
-                                   Operand::ImmU8(data[data_idx]),
-                                   rm_operand))
+            Ok((3, Instruction::src_dst(cmd,
+                                        Operand::ImmU8(data[data_idx]),
+                                        rm_operand)))
         } else {
             let sw_flag = get_two_bit_value(data[0] & 0x3);
             match sw_flag {
-                DBV01 => (4,
-                          Instruction::src_dst(sub_code, Operand::ImmU16(read_u16_val(&data[data_idx..data_idx+2])),
-                                                rm_operand)),
-                _ => (3,
-                      Instruction::src_dst(sub_code, Operand::ImmU8(data[data_idx]), rm_operand))
+                DBV01 => Ok((4, Instruction::src_dst(sub_code,
+                                                     Operand::ImmU16(read_u16_val(&data[data_idx..data_idx+2])),
+                                                     rm_operand))),
+                _ => Ok((3, Instruction::src_dst(sub_code, Operand::ImmU8(data[data_idx]), rm_operand)))
             }
         }
     }
 }
 
-fn decode_acc_mem_instruction(cmd: Command, data: &[u8]) -> (usize, Instruction) {
+fn decode_acc_mem_instruction(cmd: Command, data: &[u8]) -> Result<(usize, Instruction), String> {
     use BitValue::*;
     use ThreeBitValue::*;
 
@@ -1124,22 +1124,22 @@ fn decode_acc_mem_instruction(cmd: Command, data: &[u8]) -> (usize, Instruction)
     let val = read_u16_val(&data[1..2+w_flag as usize]);
     let d_flag = get_bit_value((data[0] & D_MASK) >> D_SHFT);
     match d_flag {
-        BV0 => (3, Instruction::src_dst(cmd, Operand::PtrDir(val), reg_operand)),
-        BV1 => (3, Instruction::src_dst(cmd, reg_operand, Operand::PtrDir(val)))
+        BV0 => Ok((3, Instruction::src_dst(cmd, Operand::PtrDir(val), reg_operand))),
+        BV1 => Ok((3, Instruction::src_dst(cmd, reg_operand, Operand::PtrDir(val))))
     }
 }
 
-fn decode_imm_acc_instruction(cmd: Command, data: &[u8]) -> (usize, Instruction) {
+fn decode_imm_acc_instruction(cmd: Command, data: &[u8]) -> Result<(usize, Instruction), String> {
     use BitValue::*;
     use ThreeBitValue::*;
 
     let w_flag = get_bit_value((data[0] & W_MASK) >> W_SHFT);
     let reg_operand = get_reg_operand(w_flag, TBV000);
     match w_flag {
-        BV0 => (2, Instruction::src_dst(cmd, Operand::ImmI8(data[1] as i8), reg_operand)),
+        BV0 => Ok((2, Instruction::src_dst(cmd, Operand::ImmI8(data[1] as i8), reg_operand))),
         BV1 => {
             let val = read_i16_val(&data[1..2+w_flag as usize]);
-            (3, Instruction::src_dst(cmd, Operand::ImmI16(val), reg_operand))
+            Ok((3, Instruction::src_dst(cmd, Operand::ImmI16(val), reg_operand)))
         }
     }
 }
@@ -1147,7 +1147,7 @@ fn decode_imm_acc_instruction(cmd: Command, data: &[u8]) -> (usize, Instruction)
 fn decode_reg_rm_strings_with_indicated_dw(cmd: Command,
                                           data: &[u8],
                                           w_flag: BitValue,
-                                          d_flag: BitValue) -> (usize, Instruction)
+                                          d_flag: BitValue) -> Result<(usize, Instruction), String>
 {
     use BitValue::*;
     use TwoBitValue::*;
@@ -1172,25 +1172,25 @@ fn decode_reg_rm_strings_with_indicated_dw(cmd: Command,
         (rm_operand, reg_operand)
     };
 
-    (offset, Instruction::src_dst(cmd, src, dst))
+    Ok((offset, Instruction::src_dst(cmd, src, dst)))
 }
 
-fn decode_reg_rm_with_disp_instruction(cmd: Command, data: &[u8]) -> (usize, Instruction) {
+fn decode_reg_rm_with_disp_instruction(cmd: Command, data: &[u8]) -> Result<(usize, Instruction), String> {
     let w_flag = get_bit_value((data[0] & W_MASK) >> W_SHFT);
     let d_flag = get_bit_value((data[0] & D_MASK) >> D_SHFT);
     decode_reg_rm_strings_with_indicated_dw(cmd, data, w_flag, d_flag)
 }
 
-fn decode_reg_rm_with_disp_instruction_d1(cmd: Command, data: &[u8]) -> (usize, Instruction) {
+fn decode_reg_rm_with_disp_instruction_d1(cmd: Command, data: &[u8]) -> Result<(usize, Instruction), String> {
     let w_flag = get_bit_value((data[0] & W_MASK) >> W_SHFT);
     decode_reg_rm_strings_with_indicated_dw(cmd, data, w_flag, BitValue::BV1)
 }
 
-fn decode_reg_rm_with_disp_instruction_d1w1(cmd: Command, data: &[u8]) -> (usize, Instruction) {
+fn decode_reg_rm_with_disp_instruction_d1w1(cmd: Command, data: &[u8]) -> Result<(usize, Instruction), String> {
     decode_reg_rm_strings_with_indicated_dw(cmd, data, BitValue::BV1, BitValue::BV1)
 }
 
-fn decode_mov_with_sr_instruction(cmd: Command, data: &[u8]) -> (usize, Instruction) {
+fn decode_mov_with_sr_instruction(cmd: Command, data: &[u8]) -> Result<(usize, Instruction), String> {
     let sr_code = get_two_bit_value((data[1] & SR_MASK) >> SR_SHFT);
     let seg_reg_operand = get_seg_reg_operand(sr_code);
 
@@ -1198,29 +1198,30 @@ fn decode_mov_with_sr_instruction(cmd: Command, data: &[u8]) -> (usize, Instruct
     let rm_code = get_three_bit_value((data[1] & RM_MASK) >> RM_SHFT);
     let t = get_mem_ptr_and_displacement(data, rm_code, mod_code);
 
-    (t.0 + 2, if (data[0] & 0x2) == 0x2 {
+    Ok((t.0 + 2, if (data[0] & 0x2) == 0x2 {
         Instruction::src_dst(cmd, t.1, seg_reg_operand)
     } else {
         Instruction::src_dst(cmd, seg_reg_operand, t.1)
-    })
+    }))
 }
 
-fn decode_jmp_i8_instruction(cmd: Command, data: &[u8]) -> (usize, Instruction) {
+fn decode_jmp_i8_instruction(cmd: Command, data: &[u8]) -> Result<(usize, Instruction), String> {
     let jump_offset: i8 = data[1] as i8;
-    (2, Instruction::jumpi8(cmd, jump_offset))
+    Ok((2, Instruction::jumpi8(cmd, jump_offset)))
 }
 
-fn decode_jmp_i16_instruction(cmd: Command, data: &[u8]) -> (usize, Instruction) {
+fn decode_jmp_i16_instruction(cmd: Command, data: &[u8]) -> Result<(usize, Instruction), String> {
     let jump_offset: i16 = read_i16_val(&data[1..3]);
-    (3, Instruction::jumpi16(cmd, jump_offset))
+    Ok((3, Instruction::jumpi16(cmd, jump_offset)))
 }
 
-fn decode_shift_rot_instruction(_cmd: Command, data: &[u8]) -> (usize, Instruction) {
+fn decode_shift_rot_instruction(_cmd: Command, data: &[u8]) -> Result<(usize, Instruction), String> {
     use BitValue::*;
     use TwoBitValue::*;
     use ThreeBitValue::*;
     use Command::*;
-    let sub_cmd = match get_three_bit_value((data[1] & SUB_CODE_MASK) >> SUB_CODE_SHFT) {
+    let sub_code = (data[1] & SUB_CODE_MASK) >> SUB_CODE_SHFT;
+    let sub_cmd = match get_three_bit_value(sub_code) {
         TBV000 => Rol,
         TBV001 => Ror,
         TBV010 => Rcl,
@@ -1228,7 +1229,7 @@ fn decode_shift_rot_instruction(_cmd: Command, data: &[u8]) -> (usize, Instructi
         TBV100 => Shl,
         TBV101 => Shr,
         TBV111 => Sar,
-        _ => panic!("Unsupported subcode")
+        _ => {return Err(String::from(format!("Unsupported subcode {:x}", sub_code)));}
     };
     let w_flag = get_bit_value((data[0] & W_MASK) >> W_SHFT);
     let v_flag = get_bit_value((data[0] & V_MASK) >> V_SHFT);
@@ -1236,7 +1237,7 @@ fn decode_shift_rot_instruction(_cmd: Command, data: &[u8]) -> (usize, Instructi
     let rm_code = get_three_bit_value((data[1] & RM_MASK) >> RM_SHFT);
     let t = get_mem_ptr_and_displacement(data, rm_code, mod_code);
 
-    match mod_code {
+    Ok(match mod_code {
         DBV11 => {
             match v_flag {
                 BV0 => (2 + t.0, Instruction::src_dst(sub_cmd, Operand::ImmU8(1), t.1)),
@@ -1250,10 +1251,10 @@ fn decode_shift_rot_instruction(_cmd: Command, data: &[u8]) -> (usize, Instructi
                 BV1 => (2 + t.0, Instruction::src_dst(sub_cmd, Operand::Reg(Reg::Cl), t.1).size(size))
             }
         }
-    }
+    })
 }
 
-fn decode_rm_with_disp_instruction(_cmd: Command, data: &[u8]) -> (usize, Instruction) {
+fn decode_rm_with_disp_instruction(_cmd: Command, data: &[u8]) -> Result<(usize, Instruction), String> {
     use Command::*;
     use BitValue::*;
     use TwoBitValue::*;
@@ -1268,7 +1269,7 @@ fn decode_rm_with_disp_instruction(_cmd: Command, data: &[u8]) -> (usize, Instru
                 } else if (data[0] & 0xFE) == 0xF6 {
                     return decode_imm_rm_instruction(Test, data);
                 } else {
-                    panic!("unknown opcode/subcode")
+                    return Err(String::from(format!("unknown opcode/subcode {:x}", data[0])));
                 }
             },
             TBV001 => (true, false, Dec),
@@ -1282,7 +1283,7 @@ fn decode_rm_with_disp_instruction(_cmd: Command, data: &[u8]) -> (usize, Instru
                 } else if (data[0] & 0xFE) == 0xF6 {
                     (true, false, Div)
                 } else {
-                    panic!("unknwon opcode/subcode")
+                    return Err(String::from(format!("unknown opcode/subcode {:x}", data[0])));
                 }
             }
             TBV111 => (true, false, IDiv),
@@ -1293,7 +1294,7 @@ fn decode_rm_with_disp_instruction(_cmd: Command, data: &[u8]) -> (usize, Instru
     let rm_code = get_three_bit_value((data[1] & RM_MASK) >> RM_SHFT);
     let t = get_mem_ptr_and_displacement(data, rm_code, mod_code);
 
-    if use_w_flag && (mod_code != DBV11) {
+    Ok(if use_w_flag && (mod_code != DBV11) {
         let w_flag = get_bit_value((data[0] & W_MASK) >> W_SHFT);
         let size = match w_flag {
             BV0 => DataSize::Byte,
@@ -1306,24 +1307,24 @@ fn decode_rm_with_disp_instruction(_cmd: Command, data: &[u8]) -> (usize, Instru
         } else {
             (2 + t.0, Instruction::single_op(sub_cmd, t.1))
         }
-    }
+    })
 }
 
-fn decode_single_byte_instruction_with_sr(cmd: Command, data: &[u8]) -> (usize, Instruction) {
+fn decode_single_byte_instruction_with_sr(cmd: Command, data: &[u8]) -> Result<(usize, Instruction), String> {
     let reg_operand = get_seg_reg_operand(get_two_bit_value((data[0] & 0x18) >> 3));
-    (1, Instruction::single_op(cmd, reg_operand))
+    Ok((1, Instruction::single_op(cmd, reg_operand)))
 }
 
-fn decode_single_byte_instruction_with_reg(cmd: Command, data: &[u8]) -> (usize, Instruction) {
+fn decode_single_byte_instruction_with_reg(cmd: Command, data: &[u8]) -> Result<(usize, Instruction), String> {
     let reg_operand = get_reg_operand(BitValue::BV1, get_three_bit_value(data[0] & 0x7));
     if cmd == Command::Xchg {
-        (1, Instruction::src_dst(cmd, Operand::Reg(Reg::Ax), reg_operand))
+        Ok((1, Instruction::src_dst(cmd, Operand::Reg(Reg::Ax), reg_operand)))
     } else {
-        (1, Instruction::single_op(cmd, reg_operand))
+        Ok((1, Instruction::single_op(cmd, reg_operand)))
     }
 }
 
-fn decode_inout_instruction(cmd: Command, data: &[u8]) -> (usize, Instruction) {
+fn decode_inout_instruction(cmd: Command, data: &[u8]) -> Result<(usize, Instruction), String> {
     use BitValue::*;
     use Reg::*;
     use Command::*;
@@ -1336,69 +1337,77 @@ fn decode_inout_instruction(cmd: Command, data: &[u8]) -> (usize, Instruction) {
     } else {
         (2, Operand::ImmU8(data[1]))
     };
-    if cmd == In {
+    Ok(if cmd == In {
         (offset, Instruction::src_dst(cmd, operand2, operand1))
     } else {
         (offset, Instruction::src_dst(cmd, operand1, operand2))
-    }
+    })
 }
 
-fn decode_ascii_adjust_instruction(cmd: Command, data: &[u8]) -> (usize, Instruction) {
+fn decode_ascii_adjust_instruction(cmd: Command, data: &[u8]) -> Result<(usize, Instruction), String> {
     if data[1] != 0x0A {
-        panic!("Invalid second byte for ascii adjust for mul/div instruction")
+        Err(String::from("Invalid second byte for ascii adjust for mul/div instruction"))
+    } else {
+        Ok((2, Instruction::no_op(cmd)))
     }
-    (2, Instruction::no_op(cmd))
 }
 
-fn decode_repeat_instruction(cmd: Command, data: &[u8]) -> (usize, Instruction) {
-    (2, Instruction::single_op(cmd, repeat_operand_from_byte(data[1])))
+fn decode_repeat_instruction(cmd: Command, data: &[u8]) -> Result<(usize, Instruction), String> {
+    match repeat_operand_from_byte(data[1]) {
+        Ok(op) => Ok((2, Instruction::single_op(cmd, op))),
+        Err(e) => Err(e)
+    }
 }
 
-fn decode_instruction_with_imm_u8(cmd: Command, data: &[u8]) -> (usize, Instruction) {
-    (2, Instruction::single_op(cmd, Operand::ImmU8(data[1])))
+fn decode_instruction_with_imm_u8(cmd: Command, data: &[u8]) -> Result<(usize, Instruction), String> {
+    Ok((2, Instruction::single_op(cmd, Operand::ImmU8(data[1]))))
 }
-// fn decode_instruction_with_imm_i8(cmd: Command, data: &[u8]) -> (usize, Instruction) {
+// fn decode_instruction_with_imm_i8(cmd: Command, data: &[u8]) -> Result<usize, Instruction), String> {
 //     (2, Instruction::single_op(cmd, Operand::ImmI8(data[1] as i8)))
 // }
 
-// fn decode_instruction_with_imm_u16(cmd: Command, data: &[u8]) -> (usize, Instruction) {
+// fn decode_instruction_with_imm_u16(cmd: Command, data: &[u8]) -> Result<usize, Instruction), String> {
 //     (3, Instruction::single_op(cmd, Operand::ImmU16(read_u16_val(&data[1..3]))))
 // }
 
-fn decode_instruction_with_imm_i16(cmd: Command, data: &[u8]) -> (usize, Instruction) {
-    (3, Instruction::single_op(cmd, Operand::ImmI16(read_i16_val(&data[1..3]))))
+fn decode_instruction_with_imm_i16(cmd: Command, data: &[u8]) -> Result<(usize, Instruction), String> {
+    Ok((3, Instruction::single_op(cmd, Operand::ImmI16(read_i16_val(&data[1..3])))))
 }
 
-fn decode_direct_instruction(cmd: Command, _data: &[u8]) -> (usize, Instruction) {
-    (1, Instruction::no_op(cmd))
+fn decode_direct_instruction(cmd: Command, _data: &[u8]) -> Result<(usize, Instruction), String> {
+    Ok((1, Instruction::no_op(cmd)))
 }
 
-fn decode_intersegment_instruction(cmd: Command, data: &[u8]) -> (usize, Instruction) {
-    (5, Instruction::src_dst(cmd,
-                             Operand::ImmU16(read_u16_val(&data[1..3])),
-                             Operand::ImmU16(read_u16_val(&data[3..5])))
-     .set_intersegment())
+fn decode_intersegment_instruction(cmd: Command, data: &[u8]) -> Result<(usize, Instruction), String> {
+    Ok((5, Instruction::src_dst(cmd,
+                                Operand::ImmU16(read_u16_val(&data[1..3])),
+                                Operand::ImmU16(read_u16_val(&data[3..5])))
+        .set_intersegment()))
 }
 
-fn decode_lock_instruction(_cmd: Command, data: &[u8]) -> (usize, Instruction){
-    let (sub_len, sub_inst) = decode_instruction(&data[1..]);
-    (sub_len + 1, sub_inst.lock())
+fn decode_lock_instruction(_cmd: Command, data: &[u8]) -> Result<(usize, Instruction), String> {
+    match decode_instruction(&data[1..]) {
+        Ok((sub_len, sub_inst)) => Ok((sub_len + 1, sub_inst.lock())),
+        Err(e) => Err(e)
+    }
 }
 
-fn decode_segment_instruction(_cmd: Command, data: &[u8]) -> (usize, Instruction) {
+fn decode_segment_instruction(_cmd: Command, data: &[u8]) -> Result<(usize, Instruction), String> {
     use SegReg::*;
     let sr = match data[0] {
         0x26 => Es,
         0x2E => Cs,
         0x36 => Ss,
         0x3E => Ds,
-        _ => panic!("Invalid segment prefix")
+        _ => { return Err(String::from(format!("Invalid segment prefix: {:x}", data[0]))); }
     };
-    let (sub_len, sub_inst) = decode_instruction(&data[1..]);
-    (sub_len + 1, sub_inst.set_segment(sr))
+    match decode_instruction(&data[1..]) {
+        Ok ((sub_len, sub_inst)) => Ok((sub_len + 1, sub_inst.set_segment(sr))),
+        Err(e) => Err(e)
+    }
 }
 
-fn decode_instruction(data: &[u8]) -> (usize, Instruction)
+fn decode_instruction(data: &[u8]) -> Result<(usize, Instruction), String>
 {
     let opcode = get_opcode_info(data[0]);
     match opcode.opt {
@@ -1427,22 +1436,25 @@ fn decode_instruction(data: &[u8]) -> (usize, Instruction)
         OpcodeParseType::Lock => decode_lock_instruction(opcode.cmd, data),
         OpcodeParseType::Segment => decode_segment_instruction(opcode.cmd, data),
         OpcodeParseType::Direct => decode_direct_instruction(opcode.cmd, data),
-        OpcodeParseType::Nop => panic!("Invalid opcode 0x{:x}",data[0])
+        OpcodeParseType::Nop => Err(String::from(format!("Invalid opcode 0x{:x}",data[0])))
     }
 }
 
-fn disassemble(data: &[u8]) -> (usize, String) {
-    let (offset, inst) = decode_instruction(data);
-    (offset, inst.to_str())
+fn decode_to_text(data: &[u8]) -> Result<(usize, String), String> {
+    match decode_instruction(data) {
+        Ok((offset, inst)) => Ok((offset, inst.to_str())),
+        Err(e) => Err(e)
+    }
 }
 
-fn decode_from_file(filepath: &String) -> String {
-    let data = read(filepath).expect(
-        &format!("Failure reading {}", filepath));
-    decode_from_data(&data)
+fn decode_from_file(filepath: &String) -> Result<String, String> {
+    match read(filepath) {
+        Err(e) => { return Err(String::from(format!("Failure reading {}: {}", filepath, e)));}
+        Ok(data) => decode_from_data(&data)
+    }
 }
 
-fn decode_from_data(data: &[u8]) -> String {
+fn decode_from_data(data: &[u8]) -> Result<String, String> {
     let n = data.len();
     let mut i = 0;
     let mut lines: Vec<(String, Option<usize>, Option<usize>)> = Vec::new();
@@ -1454,7 +1466,7 @@ fn decode_from_data(data: &[u8]) -> String {
 
     while i < n {
         let (offset, code): (usize, String) = {
-            disassemble(&data[i..n])
+            decode_to_text(&data[i..n])?
         };
 
         let (codestr, dst) = match code.find(OFFSET_STR) {
@@ -1504,7 +1516,7 @@ fn decode_from_data(data: &[u8]) -> String {
 
         ret.push_str(&code);
     }
-    ret
+    Ok(ret)
 }
 
 fn main() {
@@ -1513,12 +1525,19 @@ fn main() {
         println!("Usage: args[0] binary_file");
         return;
     }
-    println!("{}", decode_from_file(&args[1]));
+    match decode_from_file(&args[1]) {
+        Ok(r) => {println!("{}", r);}
+        Err(e) => {println!("Error: {}", e);}
+    }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
+
+    fn disassemble(data: &[u8]) -> (usize, String) {
+        decode_to_text(data).unwrap()
+    }
 
     #[test]
     fn test_instruction_to_str() {
@@ -1619,7 +1638,7 @@ mod test {
             mov sp, di\n\
             mov bp, ax\n";
 
-        assert_eq!(decode_from_data(&test_data), expected);
+        assert_eq!(decode_from_data(&test_data).unwrap(), expected);
     }
 
     #[test]
@@ -1650,7 +1669,7 @@ mod test {
              mov [bp + si], cl\n\
              mov [bp], ch\n";
 
-        assert_eq!(decode_from_data(&test_data), expected);
+        assert_eq!(decode_from_data(&test_data).unwrap(), expected);
     }
 
     #[test]
@@ -1676,7 +1695,7 @@ mod test {
              mov [2554], ax\n\
              mov [15], ax\n";
 
-        assert_eq!(decode_from_data(&test_data), expected);
+        assert_eq!(decode_from_data(&test_data).unwrap(), expected);
     }
 
     #[test]
@@ -1719,7 +1738,7 @@ mod test {
              loopnz label_2\n\
              jcxz label_2\n";
 
-        assert_eq!(decode_from_data(&test_data), expected);
+        assert_eq!(decode_from_data(&test_data).unwrap(), expected);
     }
 
     #[test]
@@ -2873,6 +2892,5 @@ mod test {
                    (2, String::from("jmp far [di]")));
         assert_eq!(disassemble(&[0xea, 0x88, 0x77, 0x66, 0x55]),
                    (5, String::from("jmp 21862:30600")));
-
     }
 }
