@@ -2820,4 +2820,18 @@ mod test {
         assert_eq!(disassemble(&[0xc3]),
                    (1, String::from("ret")));
     }
+
+    #[test]
+    fn test_more_call_jump_instructions() {
+        assert_eq!(disassemble(&[0xff, 0x52, 0xc6]),
+                   (3, String::from("call [bp + si - 58]")));
+        assert_eq!(disassemble(&[0xff, 0x5a, 0xc6]),
+                   (3, String::from("call far [bp + si - 58]")));
+        assert_eq!(disassemble(&[0xff, 0x25]),
+                   (1, String::from("jmp [di]")));
+        assert_eq!(disassemble(&[0xff, 0x2d]),
+                   (1, String::from("jmp far [di]")));
+
+    }
+
 }
