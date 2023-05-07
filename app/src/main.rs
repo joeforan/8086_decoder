@@ -1447,6 +1447,7 @@ fn decode_from_data(data: &[u8]) -> String {
     let mut i = 0;
     let mut lines: Vec<(String, Option<usize>, Option<usize>)> = Vec::new();
     let mut labels: BTreeSet<usize> = BTreeSet::new();
+    let mut addresses: BTreeSet<usize> = BTreeSet::new();
 
     lines.push((String::from("bits 16"), None, None));
     lines.push((String::from(""), None, None));
@@ -1466,14 +1467,19 @@ fn decode_from_data(data: &[u8]) -> String {
             }
             None => (code, None)
         };
+        addresses.insert(i);
         lines.push((codestr, Some(i), dst));
         i += offset;
-
     }
+
     let mut label_map = HashMap::<usize, String>::new();
 
     for (label_no, label_address) in labels.iter().enumerate() {
-        let label_string = String::from(format!("label_{}", label_no));
+        let label_string = String::from(if addresses.contains(label_address) {
+            format!("label_{}", label_no)
+        } else {
+            format!("{}", label_address)
+        });
         label_map.insert(*label_address, label_string);
     }
 
