@@ -151,7 +151,7 @@ enum Command {
     Nop,
 }
 
-#[derive (Clone, Copy)]
+#[derive (Clone, Copy, Debug)]
 enum Reg {
     Al,
     Ah,
@@ -170,7 +170,7 @@ enum Reg {
     Si,
     Di
 }
-#[derive (Clone, Copy)]
+#[derive (Clone, Copy, Debug)]
 enum SegReg {
     Cs,
     Ds,
@@ -178,7 +178,7 @@ enum SegReg {
     Ss
 }
 
-#[derive (PartialEq, Copy, Clone)]
+#[derive (PartialEq, Copy, Clone, Debug)]
 enum AdrReg {
     BxSi,
     BxDi,
@@ -190,7 +190,7 @@ enum AdrReg {
     Bx,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 enum RepeatOperand {
     Movsb,
     Movsw,
@@ -204,7 +204,7 @@ enum RepeatOperand {
     Stosw,
 }
 
-#[derive (Copy, Clone)]
+#[derive (Copy, Clone, Debug)]
 enum Operand{
     Reg(Reg),
     SegReg(SegReg),
@@ -598,15 +598,73 @@ impl Instruction {
     }
 }
 
-struct Machine;
+struct Machine {
+    registers: [u16; 8]
+}
 
 impl Machine {
     fn new() -> Self {
-        Machine {}
+        Machine { registers: [0; 8] }
     }
 
-    fn reg_value(&self, reg: &Reg) -> u16 {
-        0
+    fn reg_value(&self, reg: Reg) -> u16 {
+        use Reg::*;
+        match reg {
+            Al => self.registers[0] & 0x00FF,
+            Ah => (self.registers[0] & 0xFF00) >> 8,
+            Ax => self.registers[0],
+            _ => 0
+        }
+    }
+
+    fn write_reg(&mut self, r: Reg, v: u16) {
+        use Reg::*;
+        match r {
+            Al => {self.registers[0] = (self.registers[0] & 0xFF00) | (v & 0x00FF);},
+            Ah => {self.registers[0] = (self.registers[0] & 0x00FF) | ((v & 0x00FF) << 8);},
+            Ax => {self.registers[0] = v;},
+            _ => {}
+        }
+    }
+
+    fn execute_mov_instruction(&mut self, instruction: &Instruction) {
+        //assert!(instruction.cmd == Command::Mov);
+        use Operand::*;
+        let src_value = match instruction.op2 {
+            Some(o) => {
+                match o {
+                    Reg(r) => { self.reg_value(r) },
+                    ImmU8(v) => v as u16,
+                    ImmI8(v) => v as u16,
+                    ImmU16(v) => v as u16,
+                    ImmI16(v) => v as u16,
+                    _ => panic!("Invalid src for mov command: {:?}", o)
+                }
+            },
+            None => panic!("No source indicated for mov command.")
+        };
+        match instruction.op1 {
+            Some(o) => {
+                match o {
+                    Reg(r) => {self.write_reg(r, src_value);},
+                    _ => panic!("Invalid dst for mov command: {:?}", o)
+                }
+            }
+            None => panic!("No destination indicated for mov command.")
+        }
+    }
+
+    fn execute_single_instruction(&mut self, instruction: &Instruction) {
+        match instruction.cmd {
+            Command::Mov => self.execute_mov_instruction(instruction),
+            _ => {}
+        }
+    }
+
+    fn execute(&mut self, instructions: &Vec<Instruction>) {
+        for i in instructions {
+            self.execute_single_instruction(&i)
+        }
     }
 }
 
@@ -2943,21 +3001,33 @@ mod test {
     #[test]
     fn test_machine_state() {
         let m: Machine = Machine::new();
-        assert_eq!(m.reg_value(&Reg::Al), 0);
-        assert_eq!(m.reg_value(&Reg::Ah), 0);
-        assert_eq!(m.reg_value(&Reg::Ax), 0);
-        assert_eq!(m.reg_value(&Reg::Bl), 0);
-        assert_eq!(m.reg_value(&Reg::Bh), 0);
-        assert_eq!(m.reg_value(&Reg::Bx), 0);
-        assert_eq!(m.reg_value(&Reg::Cl), 0);
-        assert_eq!(m.reg_value(&Reg::Ch), 0);
-        assert_eq!(m.reg_value(&Reg::Cx), 0);
-        assert_eq!(m.reg_value(&Reg::Dl), 0);
-        assert_eq!(m.reg_value(&Reg::Dh), 0);
-        assert_eq!(m.reg_value(&Reg::Dx), 0);
-        assert_eq!(m.reg_value(&Reg::Sp), 0);
-        assert_eq!(m.reg_value(&Reg::Bp), 0);
-        assert_eq!(m.reg_value(&Reg::Si), 0);
-        assert_eq!(m.reg_value(&Reg::Di), 0);
+        assert_eq!(m.reg_value(Reg::Al), 0);
+        assert_eq!(m.reg_value(Reg::Ah), 0);
+        assert_eq!(m.reg_value(Reg::Ax), 0);
+        assert_eq!(m.reg_value(Reg::Bl), 0);
+        assert_eq!(m.reg_value(Reg::Bh), 0);
+        assert_eq!(m.reg_value(Reg::Bx), 0);
+        assert_eq!(m.reg_value(Reg::Cl), 0);
+        assert_eq!(m.reg_value(Reg::Ch), 0);
+        assert_eq!(m.reg_value(Reg::Cx), 0);
+        assert_eq!(m.reg_value(Reg::Dl), 0);
+        assert_eq!(m.reg_value(Reg::Dh), 0);
+        assert_eq!(m.reg_value(Reg::Dx), 0);
+        assert_eq!(m.reg_value(Reg::Sp), 0);
+        assert_eq!(m.reg_value(Reg::Bp), 0);
+        assert_eq!(m.reg_value(Reg::Si), 0);
+        assert_eq!(m.reg_value(Reg::Di), 0);
+    }
+
+    #[test]
+    fn test_machine_state_after_mov() {
+        let mut m: Machine = Machine::new();
+        let instruction = Instruction::src_dst(Command::Mov,
+                                               Operand::ImmU16(0xdead),
+                                               Operand::Reg(Reg::Ax));
+        m.execute(&vec![instruction]);
+        assert_eq!(m.reg_value(Reg::Al), 0xad);
+        assert_eq!(m.reg_value(Reg::Ah), 0xde);
+        assert_eq!(m.reg_value(Reg::Ax), 0xdead);
     }
 }
