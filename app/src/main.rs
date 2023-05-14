@@ -3,8 +3,6 @@ use std::fs::read;
 use std::collections::{BTreeSet, HashMap};
 use std::fmt::Display;
 
-const OFFSET_STR: &str = "#OFFSET#";
-
 #[derive(PartialEq, Clone, Copy)]
 enum BitValue{
     BV0 = 0,
@@ -414,7 +412,7 @@ fn maybe_print_label<T>(dst_label: Option<&String>, offset: T) -> String
 where T: Display
 {
     match dst_label {
-        None => String::from(format!("{} {}", OFFSET_STR, offset)),
+        None => String::from(format!("#OFFSET# {}", offset)),
         Some(s) => s.clone()
     }
 }
