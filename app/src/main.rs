@@ -598,6 +598,18 @@ impl Instruction {
     }
 }
 
+struct Machine;
+
+impl Machine {
+    fn new() -> Self {
+        Machine {}
+    }
+
+    fn reg_value(&self, reg: &Reg) -> u16 {
+        0
+    }
+}
+
 
 const D_MASK: u8 = 0x02;
 const D_SHFT: u8 = 1;
@@ -2926,5 +2938,26 @@ mod test {
                    (2, String::from("jmp far [di]")));
         assert_eq!(disassemble(&[0xea, 0x88, 0x77, 0x66, 0x55]),
                    (5, String::from("jmp 21862:30600")));
+    }
+
+    #[test]
+    fn test_machine_state() {
+        let m: Machine = Machine::new();
+        assert_eq!(m.reg_value(&Reg::Al), 0);
+        assert_eq!(m.reg_value(&Reg::Ah), 0);
+        assert_eq!(m.reg_value(&Reg::Ax), 0);
+        assert_eq!(m.reg_value(&Reg::Bl), 0);
+        assert_eq!(m.reg_value(&Reg::Bh), 0);
+        assert_eq!(m.reg_value(&Reg::Bx), 0);
+        assert_eq!(m.reg_value(&Reg::Cl), 0);
+        assert_eq!(m.reg_value(&Reg::Ch), 0);
+        assert_eq!(m.reg_value(&Reg::Cx), 0);
+        assert_eq!(m.reg_value(&Reg::Dl), 0);
+        assert_eq!(m.reg_value(&Reg::Dh), 0);
+        assert_eq!(m.reg_value(&Reg::Dx), 0);
+        assert_eq!(m.reg_value(&Reg::Sp), 0);
+        assert_eq!(m.reg_value(&Reg::Bp), 0);
+        assert_eq!(m.reg_value(&Reg::Si), 0);
+        assert_eq!(m.reg_value(&Reg::Di), 0);
     }
 }
