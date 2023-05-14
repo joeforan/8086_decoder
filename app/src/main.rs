@@ -408,16 +408,16 @@ impl RepeatOperand {
     }
 }
 
-fn maybe_print_label<T>(dst_label: Option<&String>, offset: T) -> String
-where T: Display
-{
-    match dst_label {
-        None => String::from(format!("#OFFSET# {}", offset)),
-        Some(s) => s.clone()
-    }
-}
-
 impl Operand {
+
+    fn maybe_print_label<T>(dst_label: Option<&String>, offset: T) -> String
+    where T: Display
+    {
+        match dst_label {
+            None => String::from(format!("#OFFSET# {}", offset)),
+            Some(s) => s.clone()
+        }
+    }
 
     fn to_str(self, dst_label: Option<&String>) -> String
     {
@@ -443,31 +443,15 @@ impl Operand {
                 }
             },
             Offset8(offset) => {
-                maybe_print_label::<i8>(dst_label, offset)
+                Self::maybe_print_label::<i8>(dst_label, offset)
             },
             Offset16(offset) => {
-                maybe_print_label::<i16>(dst_label, offset)
+                Self::maybe_print_label::<i16>(dst_label, offset)
             },
             RepeatOperand(op) => {
                 String::from(op.to_str())
             }
 
-        }
-    }
-}
-
-fn maybe_prepend_segment(op: Operand, dst_label: Option<&String>, segment: Option<SegReg>) -> String {
-    use Operand::*;
-    match segment {
-        None => op.to_str(dst_label),
-        Some(sr) => {
-            match op {
-                PtrDir(_) |
-                PtrDisp(_) => {
-                    String::from(format!("{}:{}",sr.to_str(),op.to_str(dst_label)))
-                },
-                _ => op.to_str(dst_label)
-            }
         }
     }
 }
@@ -557,6 +541,21 @@ impl Instruction {
         }
     }
 
+    fn maybe_prepend_segment(op: Operand, dst_label: Option<&String>, segment: Option<SegReg>) -> String {
+        use Operand::*;
+        match segment {
+            None => op.to_str(dst_label),
+            Some(sr) => {
+                match op {
+                    PtrDir(_) |
+                    PtrDisp(_) => {
+                        String::from(format!("{}:{}",sr.to_str(),op.to_str(dst_label)))
+                    },
+                    _ => op.to_str(dst_label)
+                }
+            }
+        }
+    }
 
     fn to_str(&self, dst_label: Option<&String>) -> String {
         let mut ret = String::from("");
@@ -580,13 +579,13 @@ impl Instruction {
         }
         match self.op1 {
             Some(o1) => {
-                ret.push_str(&String::from(format!(" {}", maybe_prepend_segment(o1, dst_label, self.segment))));
+                ret.push_str(&String::from(format!(" {}", Self::maybe_prepend_segment(o1, dst_label, self.segment))));
                 match self.op2 {
                     Some(o2) => {
                         if self.is_intersegment {
                             ret.push_str(&String::from(format!(":{}", o2.to_str(dst_label))));
                         } else {
-                            ret.push_str(&String::from(format!(", {}", maybe_prepend_segment(o2, dst_label, self.segment))));
+                            ret.push_str(&String::from(format!(", {}", Self::maybe_prepend_segment(o2, dst_label, self.segment))));
                         }
                     },
                     None => {;}
