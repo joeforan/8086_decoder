@@ -599,12 +599,14 @@ impl Instruction {
 }
 
 struct Machine {
-    registers: [u16; 8]
+    registers: [u16; 8],
+    seg_regs: [u16; 4],
 }
 
 impl Machine {
     fn new() -> Self {
-        Machine { registers: [0; 8] }
+        Machine { registers: [0; 8],
+                  seg_regs: [0; 4] }
     }
 
     fn get_reg_idx(r: Reg) -> usize {
@@ -618,6 +620,16 @@ impl Machine {
             Bp => 5,
             Si => 6,
             Di => 7
+        }
+    }
+
+    fn get_seg_reg_idx(sr: SegReg) -> usize {
+        use SegReg::*;
+        match sr {
+            Cs => 0,
+            Ds => 1,
+            Es => 2,
+            Ss => 3
         }
     }
 
@@ -667,10 +679,18 @@ impl Machine {
         (self.registers[Self::get_reg_idx(r)] & Self::get_read_mask(r)) >> Self::get_read_shift(r)
     }
 
+    fn seg_reg_value(&self, sr: SegReg) -> u16 {
+        self.seg_regs[Self::get_seg_reg_idx(sr)]
+    }
+
     fn write_reg(&mut self, r: Reg, v: u16) {
         let idx = Self::get_reg_idx(r);
         self.registers[idx] = (self.registers[idx] & Self::get_write_reg_mask(r)) |
         ((v & Self::get_write_value_mask(r)) << Self::get_write_shift(r));
+    }
+
+    fn write_seg_reg(&mut self, sr: SegReg, v: u16) {
+        self.seg_regs[Self::get_seg_reg_idx(sr)] = v
     }
 
     fn execute_mov_instruction(&mut self, instruction: &Instruction) {
@@ -684,6 +704,7 @@ impl Machine {
                     ImmI8(v) => v as u16,
                     ImmU16(v) => v as u16,
                     ImmI16(v) => v as u16,
+                    SegReg(sr) => { self.seg_reg_value(sr)},
                     _ => panic!("Invalid src for mov command: {:?}", o)
                 }
             },
@@ -693,6 +714,7 @@ impl Machine {
             Some(o) => {
                 match o {
                     Reg(r) => {self.write_reg(r, src_value);},
+                    SegReg(sr) => {self.write_seg_reg(sr, src_value);},
                     _ => panic!("Invalid dst for mov command: {:?}", o)
                 }
             }
@@ -3066,7 +3088,7 @@ mod test {
     }
 
     #[test]
-    fn test_machine_state_after_mov() {
+    fn test_machine_state_after_imm_mov() {
         let mut m: Machine = Machine::new();
         let instructions = vec![
             Instruction::src_dst(Command::Mov,
@@ -3112,5 +3134,139 @@ mod test {
         assert_eq!(m.reg_value(Reg::Bp), 0x2);
         assert_eq!(m.reg_value(Reg::Si), 0x3);
         assert_eq!(m.reg_value(Reg::Di), 0x4);
+    }
+
+    #[test]
+    fn test_machine_state_after_imm_and_reg_mov() {
+        let mut m: Machine = Machine::new();
+        let instructions = vec![
+            Instruction::src_dst(Command::Mov,
+                                 Operand::ImmU16(1),
+                                 Operand::Reg(Reg::Ax)),
+            Instruction::src_dst(Command::Mov,
+                                 Operand::ImmU16(2),
+                                 Operand::Reg(Reg::Bx)),
+            Instruction::src_dst(Command::Mov,
+                                 Operand::ImmU16(3),
+                                 Operand::Reg(Reg::Cx)),
+            Instruction::src_dst(Command::Mov,
+                                 Operand::ImmU16(4),
+                                 Operand::Reg(Reg::Dx)),
+            Instruction::src_dst(Command::Mov,
+                                 Operand::Reg(Reg::Ax),
+                                 Operand::Reg(Reg::Sp)),
+            Instruction::src_dst(Command::Mov,
+                                 Operand::Reg(Reg::Bx),
+                                 Operand::Reg(Reg::Bp)),
+            Instruction::src_dst(Command::Mov,
+                                 Operand::Reg(Reg::Cx),
+                                 Operand::Reg(Reg::Si)),
+            Instruction::src_dst(Command::Mov,
+                                 Operand::Reg(Reg::Dx),
+                                 Operand::Reg(Reg::Di)),
+            Instruction::src_dst(Command::Mov,
+                                 Operand::Reg(Reg::Sp),
+                                 Operand::Reg(Reg::Dx)),
+            Instruction::src_dst(Command::Mov,
+                                 Operand::Reg(Reg::Bp),
+                                 Operand::Reg(Reg::Cx)),
+            Instruction::src_dst(Command::Mov,
+                                 Operand::Reg(Reg::Si),
+                                 Operand::Reg(Reg::Bx)),
+            Instruction::src_dst(Command::Mov,
+                                 Operand::Reg(Reg::Di),
+                                 Operand::Reg(Reg::Ax)),
+        ];
+
+        m.execute(&instructions);
+        assert_eq!(m.reg_value(Reg::Ax), 4);
+        assert_eq!(m.reg_value(Reg::Bx), 3);
+        assert_eq!(m.reg_value(Reg::Cx), 2);
+        assert_eq!(m.reg_value(Reg::Dx), 1);
+        assert_eq!(m.reg_value(Reg::Sp), 1);
+        assert_eq!(m.reg_value(Reg::Bp), 2);
+        assert_eq!(m.reg_value(Reg::Si), 3);
+        assert_eq!(m.reg_value(Reg::Di), 4);
+    }
+
+    #[test]
+    fn test_machine_state_with_seg_reg_mov() {
+        let mut m: Machine = Machine::new();
+        let instructions = vec![
+            Instruction::src_dst(Command::Mov,
+                                 Operand::ImmU16(0x2222),
+                                 Operand::Reg(Reg::Ax)),
+            Instruction::src_dst(Command::Mov,
+                                 Operand::ImmU16(0x4444),
+                                 Operand::Reg(Reg::Bx)),
+            Instruction::src_dst(Command::Mov,
+                                 Operand::ImmU16(0x6666),
+                                 Operand::Reg(Reg::Cx)),
+            Instruction::src_dst(Command::Mov,
+                                 Operand::ImmU16(0x8888),
+                                 Operand::Reg(Reg::Dx)),
+            Instruction::src_dst(Command::Mov,
+                                 Operand::Reg(Reg::Ax),
+                                 Operand::SegReg(SegReg::Ss)),
+            Instruction::src_dst(Command::Mov,
+                                 Operand::Reg(Reg::Bx),
+                                 Operand::SegReg(SegReg::Ds)),
+            Instruction::src_dst(Command::Mov,
+                                 Operand::Reg(Reg::Cx),
+                                 Operand::SegReg(SegReg::Es)),
+            Instruction::src_dst(Command::Mov,
+                                 Operand::ImmU8(0x11),
+                                 Operand::Reg(Reg::Al)),
+            Instruction::src_dst(Command::Mov,
+                                 Operand::ImmU8(0x33),
+                                 Operand::Reg(Reg::Bh)),
+            Instruction::src_dst(Command::Mov,
+                                 Operand::ImmU8(0x55),
+                                 Operand::Reg(Reg::Cl)),
+            Instruction::src_dst(Command::Mov,
+                                 Operand::ImmU8(0x77),
+                                 Operand::Reg(Reg::Dh)),
+            Instruction::src_dst(Command::Mov,
+                                 Operand::Reg(Reg::Bl),
+                                 Operand::Reg(Reg::Ah)),
+            Instruction::src_dst(Command::Mov,
+                                 Operand::Reg(Reg::Dh),
+                                 Operand::Reg(Reg::Cl)),
+            Instruction::src_dst(Command::Mov,
+                                 Operand::Reg(Reg::Ax),
+                                 Operand::SegReg(SegReg::Ss)),
+            Instruction::src_dst(Command::Mov,
+                                 Operand::Reg(Reg::Bx),
+                                 Operand::SegReg(SegReg::Ds)),
+            Instruction::src_dst(Command::Mov,
+                                 Operand::Reg(Reg::Cx),
+                                 Operand::SegReg(SegReg::Es)),
+            Instruction::src_dst(Command::Mov,
+                                 Operand::SegReg(SegReg::Ss),
+                                 Operand::Reg(Reg::Sp)),
+            Instruction::src_dst(Command::Mov,
+                                 Operand::SegReg(SegReg::Ds),
+                                 Operand::Reg(Reg::Bp)),
+            Instruction::src_dst(Command::Mov,
+                                 Operand::SegReg(SegReg::Es),
+                                 Operand::Reg(Reg::Si)),
+            Instruction::src_dst(Command::Mov,
+                                 Operand::Reg(Reg::Dx),
+                                 Operand::Reg(Reg::Di)),
+        ];
+
+        m.execute(&instructions);
+        assert_eq!(m.reg_value(Reg::Ax), 0x4411);
+        assert_eq!(m.reg_value(Reg::Bx), 0x3344);
+        assert_eq!(m.reg_value(Reg::Cx), 0x6677);
+        assert_eq!(m.reg_value(Reg::Dx), 0x7788);
+        assert_eq!(m.reg_value(Reg::Sp), 0x4411);
+        assert_eq!(m.reg_value(Reg::Bp), 0x3344);
+        assert_eq!(m.reg_value(Reg::Si), 0x6677);
+        assert_eq!(m.reg_value(Reg::Di), 0x7788);
+        assert_eq!(m.seg_reg_value(SegReg::Cs), 0x0);
+        assert_eq!(m.seg_reg_value(SegReg::Ds), 0x3344);
+        assert_eq!(m.seg_reg_value(SegReg::Es), 0x6677);
+        assert_eq!(m.seg_reg_value(SegReg::Ss), 0x4411);
     }
 }
