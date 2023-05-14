@@ -611,15 +611,21 @@ impl Machine {
         use Reg::*;
         match r {
             Al | Ah | Ax => 0,
-            _ => 7
+            Bl | Bh | Bx => 1,
+            Cl | Ch | Cx => 2,
+            Dl | Dh | Dx => 3,
+            Sp => 4,
+            Bp => 5,
+            Si => 6,
+            Di => 7
         }
     }
 
     fn get_read_mask(r: Reg) -> u16 {
         use Reg::*;
         match r {
-            Al => 0x00FF,
-            Ah => 0xFF00,
+            Al | Bl | Cl | Dl => 0x00FF,
+            Ah | Bh | Ch | Dh => 0xFF00,
             _ => 0xFFFF,
         }
     }
@@ -627,7 +633,7 @@ impl Machine {
     fn get_read_shift(r: Reg) -> u8 {
         use Reg::*;
         match r {
-            Ah => 8,
+            Ah | Bh | Ch | Dh => 8,
             _ => 0
         }
     }
@@ -635,8 +641,8 @@ impl Machine {
     fn get_write_reg_mask(r: Reg) -> u16 {
         use Reg::*;
         match r {
-            Ah => 0x00FF,
-            Al => 0xFF00,
+            Ah | Bh | Ch | Dh => 0x00FF,
+            Al | Bl | Cl | Dl => 0xFF00,
             _ => 0,
         }
     }
@@ -644,7 +650,7 @@ impl Machine {
     fn get_write_value_mask(r: Reg) -> u16 {
         use Reg::*;
         match r {
-            Ah | Al => 0x00FF,
+            Ah | Al | Bh | Bl | Ch | Cl | Dh | Dl => 0x00FF,
             _ => 0xFFFF
         }
     }
@@ -652,7 +658,7 @@ impl Machine {
     fn get_write_shift(r: Reg) -> u8 {
         use Reg::*;
         match r {
-            Ah => 8,
+            Ah | Bh | Ch | Dh => 8,
             _ => 0
         }
     }
@@ -3062,12 +3068,49 @@ mod test {
     #[test]
     fn test_machine_state_after_mov() {
         let mut m: Machine = Machine::new();
-        let instruction = Instruction::src_dst(Command::Mov,
-                                               Operand::ImmU16(0xdead),
-                                               Operand::Reg(Reg::Ax));
-        m.execute(&vec![instruction]);
+        let instructions = vec![
+            Instruction::src_dst(Command::Mov,
+                                 Operand::ImmU16(0xdead),
+                                 Operand::Reg(Reg::Ax)),
+            Instruction::src_dst(Command::Mov,
+                                 Operand::ImmU16(0xbeef),
+                                 Operand::Reg(Reg::Bx)),
+            Instruction::src_dst(Command::Mov,
+                                 Operand::ImmU16(0xabcd),
+                                 Operand::Reg(Reg::Cx)),
+            Instruction::src_dst(Command::Mov,
+                                 Operand::ImmU16(0xef01),
+                                 Operand::Reg(Reg::Dx)),
+            Instruction::src_dst(Command::Mov,
+                                 Operand::ImmU16(0x1),
+                                 Operand::Reg(Reg::Sp)),
+            Instruction::src_dst(Command::Mov,
+                                 Operand::ImmU16(0x2),
+                                 Operand::Reg(Reg::Bp)),
+            Instruction::src_dst(Command::Mov,
+                                 Operand::ImmU16(0x3),
+                                 Operand::Reg(Reg::Si)),
+            Instruction::src_dst(Command::Mov,
+                                 Operand::ImmU16(0x4),
+                                 Operand::Reg(Reg::Di)),
+        ];
+
+        m.execute(&instructions);
         assert_eq!(m.reg_value(Reg::Al), 0xad);
         assert_eq!(m.reg_value(Reg::Ah), 0xde);
         assert_eq!(m.reg_value(Reg::Ax), 0xdead);
+        assert_eq!(m.reg_value(Reg::Bl), 0xef);
+        assert_eq!(m.reg_value(Reg::Bh), 0xbe);
+        assert_eq!(m.reg_value(Reg::Bx), 0xbeef);
+        assert_eq!(m.reg_value(Reg::Cl), 0xcd);
+        assert_eq!(m.reg_value(Reg::Ch), 0xab);
+        assert_eq!(m.reg_value(Reg::Cx), 0xabcd);
+        assert_eq!(m.reg_value(Reg::Dl), 0x01);
+        assert_eq!(m.reg_value(Reg::Dh), 0xef);
+        assert_eq!(m.reg_value(Reg::Dx), 0xef01);
+        assert_eq!(m.reg_value(Reg::Sp), 0x1);
+        assert_eq!(m.reg_value(Reg::Bp), 0x2);
+        assert_eq!(m.reg_value(Reg::Si), 0x3);
+        assert_eq!(m.reg_value(Reg::Di), 0x4);
     }
 }
