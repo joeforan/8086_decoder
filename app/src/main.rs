@@ -1,6 +1,7 @@
 use std::env::args;
 use std::fs::read;
 use std::collections::{BTreeSet, HashMap};
+use std::fmt::Display;
 
 const OFFSET_STR: &str = "#OFFSET#";
 
@@ -409,8 +410,18 @@ impl RepeatOperand {
     }
 }
 
+fn maybe_print_label<T>(dst_label: Option<&String>, offset: T) -> String
+where T: Display
+{
+    match dst_label {
+        None => String::from(format!("{} {}", OFFSET_STR, offset)),
+        Some(s) => s.clone()
+    }
+}
+
 impl Operand {
-    fn to_str(self) -> String
+
+    fn to_str(self, dst_label: Option<&String>) -> String
     {
         use Operand::*;
         match self {
@@ -434,10 +445,10 @@ impl Operand {
                 }
             },
             Offset8(offset) => {
-                String::from(format!("{} {}", OFFSET_STR, offset))
+                maybe_print_label::<i8>(dst_label, offset)
             },
             Offset16(offset) => {
-                String::from(format!("{} {}", OFFSET_STR, offset))
+                maybe_print_label::<i16>(dst_label, offset)
             },
             RepeatOperand(op) => {
                 String::from(op.to_str())
@@ -447,17 +458,17 @@ impl Operand {
     }
 }
 
-fn maybe_prepend_segment(op: Operand, segment: Option<SegReg>) -> String {
+fn maybe_prepend_segment(op: Operand, dst_label: Option<&String>, segment: Option<SegReg>) -> String {
     use Operand::*;
     match segment {
-        None => op.to_str(),
+        None => op.to_str(dst_label),
         Some(sr) => {
             match op {
                 PtrDir(_) |
                 PtrDisp(_) => {
-                    String::from(format!("{}:{}",sr.to_str(),op.to_str()))
+                    String::from(format!("{}:{}",sr.to_str(),op.to_str(dst_label)))
                 },
-                _ => op.to_str()
+                _ => op.to_str(dst_label)
             }
         }
     }
@@ -535,7 +546,21 @@ impl Instruction {
         self
     }
 
-    fn to_str(&self) -> String {
+    fn offset(&self) -> Option<isize>
+    {
+        match self.op1
+        {
+            Some(o) => match o {
+                Operand::Offset8(v) => Some(v as isize),
+                Operand::Offset16(v) => Some(v as isize),
+                _ => None
+            },
+            _ => None
+        }
+    }
+
+
+    fn to_str(&self, dst_label: Option<&String>) -> String {
         let mut ret = String::from("");
 
         if self.lock {
@@ -557,13 +582,13 @@ impl Instruction {
         }
         match self.op1 {
             Some(o1) => {
-                ret.push_str(&String::from(format!(" {}", maybe_prepend_segment(o1, self.segment))));
+                ret.push_str(&String::from(format!(" {}", maybe_prepend_segment(o1, dst_label, self.segment))));
                 match self.op2 {
                     Some(o2) => {
                         if self.is_intersegment {
-                            ret.push_str(&String::from(format!(":{}", o2.to_str())));
+                            ret.push_str(&String::from(format!(":{}", o2.to_str(dst_label))));
                         } else {
-                            ret.push_str(&String::from(format!(", {}", maybe_prepend_segment(o2, self.segment))));
+                            ret.push_str(&String::from(format!(", {}", maybe_prepend_segment(o2, dst_label, self.segment))));
                         }
                     },
                     None => {;}
@@ -1442,7 +1467,7 @@ fn decode_instruction(data: &[u8]) -> Result<(usize, Instruction), String>
 
 fn decode_to_text(data: &[u8]) -> Result<(usize, String), String> {
     match decode_instruction(data) {
-        Ok((offset, inst)) => Ok((offset, inst.to_str())),
+        Ok((offset, inst)) => Ok((offset, inst.to_str(None))),
         Err(e) => Err(e)
     }
 }
@@ -1457,30 +1482,26 @@ fn decode_from_file(filepath: &String) -> Result<String, String> {
 fn decode_from_data(data: &[u8]) -> Result<String, String> {
     let n = data.len();
     let mut i = 0;
-    let mut lines: Vec<(String, Option<usize>, Option<usize>)> = Vec::new();
+    let mut instructions: Vec<(Instruction, usize, Option<usize>)> = Vec::new();
     let mut labels: BTreeSet<usize> = BTreeSet::new();
     let mut addresses: BTreeSet<usize> = BTreeSet::new();
 
-    lines.push((String::from("bits 16"), None, None));
-    lines.push((String::from(""), None, None));
-
     while i < n {
-        let (offset, code): (usize, String) = {
-            decode_to_text(&data[i..n])?
+        let (offset, instruction): (usize, Instruction) = {
+            decode_instruction(&data[i..n])?
         };
 
-        let (codestr, dst) = match code.find(OFFSET_STR) {
-            Some(idx) => {
-                let modified_line = String::from(&code[0..idx]);
-                let jump_offset: i16 = code[idx+9..].parse::<i16>().unwrap();
-                let jump_address: usize = (i as isize + offset as isize + jump_offset as isize) as usize;
+        let dst = match instruction.offset() {
+            None => None,
+            Some(jump_offset) => {
+                let jump_address: usize = (i as isize + offset as isize + jump_offset) as usize;
                 labels.insert(jump_address);
-                (modified_line, Some(jump_address))
+                Some(jump_address)
             }
-            None => (code, None)
         };
+
         addresses.insert(i);
-        lines.push((codestr, Some(i), dst));
+        instructions.push((instruction, i, dst));
         i += offset;
     }
 
@@ -1495,26 +1516,21 @@ fn decode_from_data(data: &[u8]) -> Result<String, String> {
         label_map.insert(*label_address, label_string);
     }
 
-    let mut ret: String = "".to_owned();
-    for line in lines.iter() {
-        let mut code = String::from(line.0.clone());
-        match line.1 {
-            Some(adr) => {
-                if label_map.contains_key(&adr) {
-                    ret.push_str(&format!("{}:\n", label_map[&adr]));
-                }
-            }
-            _ => {}
-        };
-        code.push_str(
-            &match line.2 {
-                None => {String::from("\n")},
-                Some(adr) => {
-                    format!("{}\n", label_map[&adr])
-                }
-            });
+    let mut ret: String = "bits 16\n\n".to_owned();
 
-        ret.push_str(&code);
+    for (instruction, adr, dst_opt) in instructions.iter() {
+        if label_map.contains_key(&adr) {
+            ret.push_str(&format!("{}:\n", label_map[&adr]));
+        }
+        ret.push_str(&format!("{}\n", String::from(instruction.to_str(
+            match dst_opt {
+                None => None,
+                Some(adr) => { Some(&label_map[&adr]) }
+                }))));
+
+//        ret.push_str(&code)// code.push_str(
+
+        // ret.push_str(&code);
     }
     Ok(ret)
 }
@@ -1543,71 +1559,71 @@ mod test {
     fn test_instruction_to_str() {
         assert_eq!(Instruction::src_dst(Command::Mov,
                                         Operand::Reg(Reg::Bx),
-                                        Operand::Reg(Reg::Cx)).to_str(),
+                                        Operand::Reg(Reg::Cx)).to_str(None),
                    "mov cx, bx");
         assert_eq!(Instruction::src_dst(Command::Mov,
                                         Operand::ImmU8(12),
-                                        Operand::Reg(Reg::Si)).to_str(),
+                                        Operand::Reg(Reg::Si)).to_str(None),
                    "mov si, 12");
         assert_eq!(Instruction::src_dst(Command::Mov,
                                         Operand::ImmI16(-3948),
-                                        Operand::Reg(Reg::Dx)).to_str(),
+                                        Operand::Reg(Reg::Dx)).to_str(None),
                    "mov dx, -3948");
         assert_eq!(Instruction::src_dst(Command::Mov,
                                         Operand::PtrDisp((AdrReg::BxSi, 0)),
-                                        Operand::Reg(Reg::Al)).to_str(),
+                                        Operand::Reg(Reg::Al)).to_str(None),
                    "mov al, [bx + si]");
         assert_eq!(Instruction::src_dst(Command::Mov,
                                         Operand::PtrDisp((AdrReg::BxSi, 0)),
-                                        Operand::Reg(Reg::Al)).to_str(),
+                                        Operand::Reg(Reg::Al)).to_str(None),
                    "mov al, [bx + si]");
         assert_eq!(Instruction::src_dst(Command::Mov,
                                         Operand::PtrDisp((AdrReg::BxDi, 4)),
-                                        Operand::Reg(Reg::Ah)).to_str(),
+                                        Operand::Reg(Reg::Ah)).to_str(None),
                    "mov ah, [bx + di + 4]");
         assert_eq!(Instruction::src_dst(Command::Mov,
                                         Operand::PtrDisp((AdrReg::BxSi, 4999)),
-                                        Operand::Reg(Reg::Al)).to_str(),
+                                        Operand::Reg(Reg::Al)).to_str(None),
                    "mov al, [bx + si + 4999]");
         assert_eq!(Instruction::src_dst(Command::Mov,
                                         Operand::PtrDisp((AdrReg::BxDi, -37)),
-                                        Operand::Reg(Reg::Ax)).to_str(),
+                                        Operand::Reg(Reg::Ax)).to_str(None),
                    "mov ax, [bx + di - 37]");
         assert_eq!(Instruction::src_dst(Command::Mov,
                                         Operand::Reg(Reg::Cl),
-                                        Operand::PtrDisp((AdrReg::BpSi, 0))).to_str(),
+                                        Operand::PtrDisp((AdrReg::BpSi, 0))).to_str(None),
                    "mov [bp + si], cl");
        assert_eq!(Instruction::src_dst(Command::Mov,
                                         Operand::PtrDir(3458),
-                                        Operand::Reg(Reg::Bx)).to_str(),
+                                        Operand::Reg(Reg::Bx)).to_str(None),
                   "mov bx, [3458]");
-        assert_eq!(Instruction::jumpi8(Command::Jnz, -2).to_str(),
-                   format!("jnz {} -2", OFFSET_STR));
+        assert_eq!(Instruction::jumpi8(Command::Jnz, -2).to_str(Some(&String::from("label2"))),
+                   format!("jnz label2"));
         assert_eq!(Instruction::src_dst(Command::Add,
                                         Operand::PtrDisp((AdrReg::BxSi, 0)),
-                                        Operand::Reg(Reg::Bx)).to_str(),
+                                        Operand::Reg(Reg::Bx)).to_str(None),
                    "add bx, [bx + si]");
         assert_eq!(Instruction::src_dst(Command::Mov,
                                         Operand::ImmU8(7),
                                         Operand::PtrDisp((AdrReg::BpDi, 0)))
                    .size(DataSize::Byte)
-                   .to_str(),
+                   .to_str(None),
                    "mov byte [bp + di], 7");
         assert_eq!(Instruction::src_dst(Command::Mov,
                                         Operand::ImmU8(7),
                                         Operand::PtrDisp((AdrReg::BpDi, 0))).size(DataSize::Word)
-                   .to_str(),
+                   .to_str(None),
                    "mov word [bp + di], 7");
         assert_eq!(Instruction::single_op(Command::Push,
-                                          Operand::Reg(Reg::Cx)).to_str(),
+                                          Operand::Reg(Reg::Cx)).to_str(None),
                    "push cx");
         assert_eq!(Instruction::single_op(Command::Push,
                                           Operand::PtrDisp((AdrReg::BxDi, -30)))
                    .size(DataSize::Word)
-                   .to_str(),
+                   .to_str(None),
                    "push word [bx + di - 30]");
 
-        assert_eq!(Instruction::no_op(Command::Xlat).to_str(),
+        assert_eq!(Instruction::no_op(Command::Xlat).to_str(None),
                    "xlat")
 
     }
