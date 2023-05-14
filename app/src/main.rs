@@ -226,6 +226,7 @@ enum DataSize
     Word
 }
 
+#[derive (Copy, Clone)]
 struct Instruction
 {
     cmd: Command,
@@ -1469,14 +1470,14 @@ fn decode_to_text(data: &[u8]) -> Result<(usize, String), String> {
     }
 }
 
-fn decode_from_file(filepath: &String) -> Result<String, String> {
+fn decode_from_file(filepath: &String) -> Result<(String, Vec<Instruction>), String> {
     match read(filepath) {
         Err(e) => { return Err(String::from(format!("Failure reading {}: {}", filepath, e)));}
         Ok(data) => decode_from_data(&data)
     }
 }
 
-fn decode_from_data(data: &[u8]) -> Result<String, String> {
+fn decode_from_data(data: &[u8]) -> Result<(String, Vec<Instruction>), String> {
     let n = data.len();
     let mut i = 0;
     let mut instructions: Vec<(Instruction, usize, Option<usize>)> = Vec::new();
@@ -1514,7 +1515,7 @@ fn decode_from_data(data: &[u8]) -> Result<String, String> {
     }
 
     let mut ret: String = "bits 16\n\n".to_owned();
-
+    let mut inst_vec: Vec<Instruction> = Vec::new();
     for (instruction, adr, dst_opt) in instructions.iter() {
         if label_map.contains_key(&adr) {
             ret.push_str(&format!("{}:\n", label_map[&adr]));
@@ -1523,13 +1524,19 @@ fn decode_from_data(data: &[u8]) -> Result<String, String> {
             match dst_opt {
                 None => None,
                 Some(adr) => { Some(&label_map[&adr]) }
-                }))));
+            }))));
+
+        inst_vec.push(instruction.clone());
 
 //        ret.push_str(&code)// code.push_str(
 
         // ret.push_str(&code);
     }
-    Ok(ret)
+    Ok((ret, inst_vec))
+}
+
+fn run_emulation(instructions: &Vec<Instruction>) {
+    println!("Running emulation!")
 }
 
 fn main() {
@@ -1538,9 +1545,23 @@ fn main() {
         println!("Usage: args[0] binary_file");
         return;
     }
-    match decode_from_file(&args[1]) {
-        Ok(r) => {println!("{}", r);}
-        Err(e) => {println!("Error: {}", e);}
+    let mut emulate = false;
+    let mut binary_file = &String::from("");
+    for arg in &args[1..] {
+        if arg == "--emulate" {
+            emulate = true
+        } else {
+            binary_file = arg
+        }
+    }
+    let (code_str, instructions) = match decode_from_file(&binary_file) {
+        Ok(r) => r,
+        Err(e) => {println!("Error: {}", e); return;}
+    };
+    if emulate {
+        run_emulation(&instructions);
+    } else {
+        println!("{}", code_str)
     }
 }
 
@@ -1651,7 +1672,7 @@ mod test {
             mov sp, di\n\
             mov bp, ax\n";
 
-        assert_eq!(decode_from_data(&test_data).unwrap(), expected);
+        assert_eq!(decode_from_data(&test_data).unwrap().0, expected);
     }
 
     #[test]
@@ -1682,7 +1703,7 @@ mod test {
              mov [bp + si], cl\n\
              mov [bp], ch\n";
 
-        assert_eq!(decode_from_data(&test_data).unwrap(), expected);
+        assert_eq!(decode_from_data(&test_data).unwrap().0, expected);
     }
 
     #[test]
@@ -1708,7 +1729,7 @@ mod test {
              mov [2554], ax\n\
              mov [15], ax\n";
 
-        assert_eq!(decode_from_data(&test_data).unwrap(), expected);
+        assert_eq!(decode_from_data(&test_data).unwrap().0, expected);
     }
 
     #[test]
@@ -1751,7 +1772,7 @@ mod test {
              loopnz label_2\n\
              jcxz label_2\n";
 
-        assert_eq!(decode_from_data(&test_data).unwrap(), expected);
+        assert_eq!(decode_from_data(&test_data).unwrap().0, expected);
     }
 
     #[test]
