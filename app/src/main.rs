@@ -607,24 +607,64 @@ impl Machine {
         Machine { registers: [0; 8] }
     }
 
-    fn reg_value(&self, reg: Reg) -> u16 {
+    fn get_reg_idx(r: Reg) -> usize {
         use Reg::*;
-        match reg {
-            Al => self.registers[0] & 0x00FF,
-            Ah => (self.registers[0] & 0xFF00) >> 8,
-            Ax => self.registers[0],
+        match r {
+            Al | Ah | Ax => 0,
+            _ => 7
+        }
+    }
+
+    fn get_read_mask(r: Reg) -> u16 {
+        use Reg::*;
+        match r {
+            Al => 0x00FF,
+            Ah => 0xFF00,
+            _ => 0xFFFF,
+        }
+    }
+
+    fn get_read_shift(r: Reg) -> u8 {
+        use Reg::*;
+        match r {
+            Ah => 8,
             _ => 0
         }
     }
 
-    fn write_reg(&mut self, r: Reg, v: u16) {
+    fn get_write_reg_mask(r: Reg) -> u16 {
         use Reg::*;
         match r {
-            Al => {self.registers[0] = (self.registers[0] & 0xFF00) | (v & 0x00FF);},
-            Ah => {self.registers[0] = (self.registers[0] & 0x00FF) | ((v & 0x00FF) << 8);},
-            Ax => {self.registers[0] = v;},
-            _ => {}
+            Ah => 0x00FF,
+            Al => 0xFF00,
+            _ => 0,
         }
+    }
+
+    fn get_write_value_mask(r: Reg) -> u16 {
+        use Reg::*;
+        match r {
+            Ah | Al => 0x00FF,
+            _ => 0xFFFF
+        }
+    }
+
+    fn get_write_shift(r: Reg) -> u8 {
+        use Reg::*;
+        match r {
+            Ah => 8,
+            _ => 0
+        }
+    }
+
+    fn reg_value(&self, r: Reg) -> u16 {
+        (self.registers[Self::get_reg_idx(r)] & Self::get_read_mask(r)) >> Self::get_read_shift(r)
+    }
+
+    fn write_reg(&mut self, r: Reg, v: u16) {
+        let idx = Self::get_reg_idx(r);
+        self.registers[idx] = (self.registers[idx] & Self::get_write_reg_mask(r)) |
+        ((v & Self::get_write_value_mask(r)) << Self::get_write_shift(r));
     }
 
     fn execute_mov_instruction(&mut self, instruction: &Instruction) {
