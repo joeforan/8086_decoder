@@ -734,6 +734,22 @@ impl Machine {
             self.execute_single_instruction(&i)
         }
     }
+
+    fn print_status(&self) {
+        println!("Ax: 0x{:x}", self.registers[0]);
+        println!("Bx: 0x{:x}", self.registers[1]);
+        println!("Cx: 0x{:x}", self.registers[2]);
+        println!("Dx: 0x{:x}", self.registers[3]);
+        println!("Sp: 0x{:x}", self.registers[4]);
+        println!("Bp: 0x{:x}", self.registers[5]);
+        println!("Si: 0x{:x}", self.registers[6]);
+        println!("Di: 0x{:x}", self.registers[7]);
+        println!("Cs: 0x{:x}", self.seg_regs[0]);
+        println!("Ds: 0x{:x}", self.seg_regs[1]);
+        println!("Es: 0x{:x}", self.seg_regs[2]);
+        println!("Ss: 0x{:x}", self.seg_regs[3]);
+
+    }
 }
 
 
@@ -1674,7 +1690,9 @@ fn decode_from_data(data: &[u8]) -> Result<(String, Vec<Instruction>), String> {
 }
 
 fn run_emulation(instructions: &Vec<Instruction>) {
-    println!("Running emulation!")
+    let mut m = Machine::new();
+    m.execute(instructions);
+    m.print_status();
 }
 
 fn main() {
