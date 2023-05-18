@@ -598,15 +598,30 @@ impl Instruction {
     }
 }
 
+enum Flag {
+    Zero,
+    Sign,
+    Parity
+}
+
+#[derive (PartialEq, Debug)]
+enum FlagValue {
+    Set,
+    Unset
+}
+
 struct Machine {
     registers: [u16; 8],
     seg_regs: [u16; 4],
+    flags: u16
 }
 
 impl Machine {
     fn new() -> Self {
         Machine { registers: [0; 8],
-                  seg_regs: [0; 4] }
+                  seg_regs: [0; 4],
+                  flags: 0
+        }
     }
 
     fn get_reg_idx(r: Reg) -> usize {
@@ -691,6 +706,10 @@ impl Machine {
 
     fn write_seg_reg(&mut self, sr: SegReg, v: u16) {
         self.seg_regs[Self::get_seg_reg_idx(sr)] = v
+    }
+
+    fn read_flag(&self, flag: Flag) -> FlagValue {
+        FlagValue::Unset
     }
 
     fn execute_mov_instruction(&mut self, instruction: &Instruction) {
@@ -3286,5 +3305,58 @@ mod test {
         assert_eq!(m.seg_reg_value(SegReg::Ds), 0x3344);
         assert_eq!(m.seg_reg_value(SegReg::Es), 0x6677);
         assert_eq!(m.seg_reg_value(SegReg::Ss), 0x4411);
+
+        assert_eq!(m.read_flag(Flag::Zero), FlagValue::Reset);
+        assert_eq!(m.read_flag(Flag::Sign), FlagValue::Reset);
+        assert_eq!(m.read_flag(Flag::Parity), FlagValue::Reset);
+        assert_eq!(m.read_flag(Flag::Carry), FlagValue::Reset);
+    }
+
+    #[test]
+    fn test_machine_state_with_add_sub_cmp() {
+        let mut m: Machine = Machine::new();
+        let instructions = vec![
+            Instruction::src_dst(Command::Mov,
+                                 Operand::ImmI16(-4093),
+                                 Operand::Reg(Reg::Bx)),
+            Instruction::src_dst(Command::Mov,
+                                 Operand::ImmI16(3841),
+                                 Operand::Reg(Reg::Cx)),
+            Instruction::src_dst(Command::Sub,
+                                 Operand::Reg(Reg::Cx),
+                                 Operand::Reg(Reg::Bx)),
+            Instruction::src_dst(Command::Mov,
+                                 Operand::ImmI16(998),
+                                 Operand::Reg(Reg::Sp)),
+            Instruction::src_dst(Command::Mov,
+                                 Operand::ImmI16(999),
+                                 Operand::Reg(Reg::Bp)),
+            Instruction::src_dst(Command::Cmp,
+                                 Operand::Reg(Reg::Sp),
+                                 Operand::Reg(Reg::Bp)),
+            Instruction::src_dst(Command::Add,
+                                 Operand::ImmI16(1027),
+                                 Operand::Reg(Reg::Bp)),
+            Instruction::src_dst(Command::Sub,
+                                 Operand::ImmI16(2026),
+                                 Operand::Reg(Reg::Bp))
+        ];
+        m.execute(&instructions);
+        assert_eq!(m.reg_value(Reg::Ax), 0x0000);
+        assert_eq!(m.reg_value(Reg::Bx), 0xE102);
+        assert_eq!(m.reg_value(Reg::Cx), 0x0F01);
+        assert_eq!(m.reg_value(Reg::Dx), 0x0000);
+        assert_eq!(m.reg_value(Reg::Sp), 0x03E6);
+        assert_eq!(m.reg_value(Reg::Bp), 0x0000);
+        assert_eq!(m.reg_value(Reg::Si), 0x0000);
+        assert_eq!(m.reg_value(Reg::Di), 0x0000);
+        assert_eq!(m.seg_reg_value(SegReg::Cs), 0x0000);
+        assert_eq!(m.seg_reg_value(SegReg::Ds), 0x0000);
+        assert_eq!(m.seg_reg_value(SegReg::Es), 0x0000);
+        assert_eq!(m.seg_reg_value(SegReg::Ss), 0x0000);
+
+        assert_eq!(m.read_flag(Flag::Zero), FlagValue::Set);
+        assert_eq!(m.read_flag(Flag::Sign), FlagValue::Reset);
+        assert_eq!(m.read_flag(Flag::Parity), FlagValue::Set);
     }
 }
