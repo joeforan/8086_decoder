@@ -601,13 +601,36 @@ impl Instruction {
 enum Flag {
     Zero,
     Sign,
-    Parity
+    Parity,
+    Carry
 }
 
 #[derive (PartialEq, Debug)]
 enum FlagValue {
     Set,
-    Unset
+    Reset
+}
+
+fn is_parity(v: u16) -> bool {
+    let mut ret = true;
+    let mut t = v;
+    while t > 0 {
+        if (t & 0x1) == 0x1 {
+            ret = !ret
+        }
+        t = t >> 1;
+    }
+    ret
+}
+
+fn get_flag_shift(f: Flag) -> u8 {
+    use Flag::*;
+    match f {
+        Zero => 0,
+        Sign => 1,
+        Parity => 2,
+        Carry => 3
+    }
 }
 
 struct Machine {
@@ -709,13 +732,26 @@ impl Machine {
     }
 
     fn read_flag(&self, flag: Flag) -> FlagValue {
-        FlagValue::Unset
+        if ((self.flags >> get_flag_shift(flag)) & 0x1) == 0x1 {
+            FlagValue::Set
+        } else {
+            FlagValue::Reset
+        }
     }
 
-    fn execute_mov_instruction(&mut self, instruction: &Instruction) {
-        //assert!(instruction.cmd == Command::Mov);
+    fn set_flag(&mut self, flag: Flag, v: FlagValue) {
+        let s = get_flag_shift(flag);
+        let mask = !(1 << s);
+        match v {
+            FlagValue::Set => {self.flags = (self.flags & mask) | (1 << s); },
+            FlagValue::Reset => {self.flags = self.flags & mask;}
+        };
+
+    }
+
+    fn get_op_value(&self, operand: Option<Operand>) -> u16 {
         use Operand::*;
-        let src_value = match instruction.op2 {
+        match operand {
             Some(o) => {
                 match o {
                     Reg(r) => { self.reg_value(r) },
@@ -728,7 +764,14 @@ impl Machine {
                 }
             },
             None => panic!("No source indicated for mov command.")
-        };
+        }
+    }
+
+
+    fn execute_mov_instruction(&mut self, instruction: &Instruction) {
+        //assert!(instruction.cmd == Command::Mov);
+        use Operand::*;
+        let src_value = self.get_op_value(instruction.op2);
         match instruction.op1 {
             Some(o) => {
                 match o {
@@ -741,9 +784,47 @@ impl Machine {
         }
     }
 
+    fn execute_arithmetic_instruction(&mut self, instruction: &Instruction) {
+        use Operand::*;
+        use Command::*;
+        let src_value = self.get_op_value(instruction.op2);
+        let res = match instruction.op1{
+            Some(o) => {
+                match o {
+                    Reg(r) => {
+                        match instruction.cmd {
+                            Add => {
+                                let v: i32 = src_value as i32 + self.reg_value(r) as i32;
+                                self.write_reg(r, (v & 0xFFFF) as u16);
+                                v
+                            },
+                            Sub | Cmp => {
+                                let v: i32 = self.reg_value(r) as i32 - src_value as i32;
+                                if instruction.cmd == Sub {
+                                    self.write_reg(r, (v & 0xFFFF) as u16);
+                                }
+                                v
+                            },
+                            _ => panic!("invalid arithmetic command!")
+                        }
+                    },
+                    _ => panic!("invlaid dst operand for arithmetic command ")
+                }
+            },
+            None => panic!("Arithmetic command does not have valid destination")
+        };
+        self.set_flag(Flag::Zero, if res == 0 { FlagValue::Set } else {FlagValue::Reset});
+        self.set_flag(Flag::Sign, if res < 0 { FlagValue::Set } else {FlagValue::Reset});
+        self.set_flag(Flag::Carry, if res > 0xFFFF { FlagValue::Set } else { FlagValue::Reset });
+        self.set_flag(Flag::Parity, if is_parity((res & 0xFFFF) as u16) { FlagValue::Set } else { FlagValue::Reset });
+    }
+
     fn execute_single_instruction(&mut self, instruction: &Instruction) {
         match instruction.cmd {
             Command::Mov => self.execute_mov_instruction(instruction),
+            Command::Add |
+            Command::Sub |
+            Command::Cmp => self.execute_arithmetic_instruction(instruction),
             _ => {}
         }
     }
