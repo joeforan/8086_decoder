@@ -60,7 +60,7 @@ enum OpcodeParseType
     Nop
 }
 
-#[derive (PartialEq, Clone, Copy)]
+#[derive (PartialEq, Clone, Copy, Debug)]
 enum Command {
     Mov,
     Add,
@@ -151,7 +151,7 @@ enum Command {
     Nop,
 }
 
-#[derive (Clone, Copy, Debug)]
+#[derive (Clone, Copy, Debug, PartialEq)]
 enum Reg {
     Al,
     Ah,
@@ -170,7 +170,7 @@ enum Reg {
     Si,
     Di
 }
-#[derive (Clone, Copy, Debug)]
+#[derive (Clone, Copy, Debug, PartialEq)]
 enum SegReg {
     Cs,
     Ds,
@@ -190,7 +190,7 @@ enum AdrReg {
     Bx,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 enum RepeatOperand {
     Movsb,
     Movsw,
@@ -204,7 +204,7 @@ enum RepeatOperand {
     Stosw,
 }
 
-#[derive (Copy, Clone, Debug)]
+#[derive (Copy, Clone, Debug, PartialEq)]
 enum Operand{
     Reg(Reg),
     SegReg(SegReg),
@@ -219,14 +219,14 @@ enum Operand{
     RepeatOperand(RepeatOperand)
 }
 
-#[derive (Copy, Clone)]
+#[derive (Copy, Clone, Debug, PartialEq)]
 enum DataSize
 {
     Byte,
     Word
 }
 
-#[derive (Copy, Clone)]
+#[derive (Copy, Clone, PartialEq, Debug)]
 struct Instruction
 {
     cmd: Command,
@@ -602,7 +602,8 @@ enum Flag {
     Zero,
     Sign,
     Parity,
-    Carry
+    Carry,
+    Auxillary
 }
 
 #[derive (PartialEq, Debug)]
@@ -629,7 +630,8 @@ fn get_flag_shift(f: Flag) -> u8 {
         Zero => 0,
         Sign => 1,
         Parity => 2,
-        Carry => 3
+        Carry => 3,
+        Auxillary => 4
     }
 }
 
@@ -755,7 +757,7 @@ impl Machine {
             Some(o) => {
                 match o {
                     Reg(r) => { self.reg_value(r) },
-                    ImmU8(v) => v as u16,
+                    ImmU8(v) => (v as i8) as u16,
                     ImmI8(v) => v as u16,
                     ImmU16(v) => v as u16,
                     ImmI16(v) => v as u16,
@@ -788,7 +790,7 @@ impl Machine {
         use Operand::*;
         use Command::*;
         let src_value = self.get_op_value(instruction.op2);
-        let res = match instruction.op1{
+        let (aux, res) = match instruction.op1{
             Some(o) => {
                 match o {
                     Reg(r) => {
@@ -796,14 +798,17 @@ impl Machine {
                             Add => {
                                 let v: i32 = src_value as i32 + self.reg_value(r) as i32;
                                 self.write_reg(r, (v & 0xFFFF) as u16);
-                                v
+
+                                (v & 0xF > 0x9, v)
                             },
                             Sub | Cmp => {
-                                let v: i32 = self.reg_value(r) as i32 - src_value as i32;
+                                let prev = self.reg_value(r);
+                                let v: i32 = prev as i32 - src_value as i32;
                                 if instruction.cmd == Sub {
                                     self.write_reg(r, (v & 0xFFFF) as u16);
                                 }
-                                v
+
+                                (src_value & 0xF > (prev & 0xF), v)
                             },
                             _ => panic!("invalid arithmetic command!")
                         }
@@ -815,8 +820,9 @@ impl Machine {
         };
         self.set_flag(Flag::Zero, if res == 0 { FlagValue::Set } else {FlagValue::Reset});
         self.set_flag(Flag::Sign, if res < 0 { FlagValue::Set } else {FlagValue::Reset});
-        self.set_flag(Flag::Carry, if res > 0xFFFF { FlagValue::Set } else { FlagValue::Reset });
+        self.set_flag(Flag::Carry, if (res & 0x10000) != 0 { FlagValue::Set } else { FlagValue::Reset });
         self.set_flag(Flag::Parity, if is_parity((res & 0xFFFF) as u16) { FlagValue::Set } else { FlagValue::Reset });
+        self.set_flag(Flag::Auxillary, if aux { FlagValue::Set} else {FlagValue::Reset});
     }
 
     fn execute_single_instruction(&mut self, instruction: &Instruction) {
@@ -849,6 +855,13 @@ impl Machine {
         println!("Es: 0x{:x}", self.seg_regs[2]);
         println!("Ss: 0x{:x}", self.seg_regs[3]);
 
+        let mut flag_str = String::from("");
+        if self.read_flag(Flag::Carry) == FlagValue::Set { flag_str.push_str("C");}
+        if self.read_flag(Flag::Parity) == FlagValue::Set { flag_str.push_str("P");}
+        if self.read_flag(Flag::Auxillary) == FlagValue::Set { flag_str.push_str("A");}
+        if self.read_flag(Flag::Sign) == FlagValue::Set { flag_str.push_str("S");}
+        if self.read_flag(Flag::Zero) == FlagValue::Set { flag_str.push_str("Z");}
+        println!("Flags: {}", flag_str);
     }
 }
 
@@ -3439,5 +3452,133 @@ mod test {
         assert_eq!(m.read_flag(Flag::Zero), FlagValue::Set);
         assert_eq!(m.read_flag(Flag::Sign), FlagValue::Reset);
         assert_eq!(m.read_flag(Flag::Parity), FlagValue::Set);
+    }
+
+    #[test]
+    fn test_machine_state_with_add_sub_cmp2() {
+        let mut m: Machine = Machine::new();
+        let instructions = vec![
+            Instruction::src_dst(Command::Add,
+                                 Operand::ImmU16(30000),
+                                 Operand::Reg(Reg::Bx)),
+            Instruction::src_dst(Command::Add,
+                                 Operand::ImmU16(10000),
+                                 Operand::Reg(Reg::Bx)),
+            Instruction::src_dst(Command::Sub,
+                                 Operand::ImmU16(5000),
+                                 Operand::Reg(Reg::Bx)),
+            Instruction::src_dst(Command::Sub,
+                                 Operand::ImmU16(5000),
+                                 Operand::Reg(Reg::Bx)),
+            Instruction::src_dst(Command::Mov,
+                                 Operand::ImmU16(1),
+                                 Operand::Reg(Reg::Bx)),
+            Instruction::src_dst(Command::Mov,
+                                 Operand::ImmU16(100),
+                                 Operand::Reg(Reg::Cx)),
+            Instruction::src_dst(Command::Add,
+                                 Operand::Reg(Reg::Cx),
+                                 Operand::Reg(Reg::Bx)),
+            Instruction::src_dst(Command::Mov,
+                                 Operand::ImmU16(10),
+                                 Operand::Reg(Reg::Dx)),
+            Instruction::src_dst(Command::Sub,
+                                 Operand::Reg(Reg::Dx),
+                                 Operand::Reg(Reg::Cx)),
+            Instruction::src_dst(Command::Add,
+                                 Operand::ImmU16(40000),
+                                 Operand::Reg(Reg::Bx)),
+            Instruction::src_dst(Command::Add,
+                                 Operand::ImmU8((-90 as i8) as u8),
+                                 Operand::Reg(Reg::Cx)),
+            Instruction::src_dst(Command::Mov,
+                                 Operand::ImmI16(99),
+                                 Operand::Reg(Reg::Sp)),
+            Instruction::src_dst(Command::Mov,
+                                 Operand::ImmI16(98),
+                                 Operand::Reg(Reg::Bp)),
+            Instruction::src_dst(Command::Cmp,
+                                 Operand::Reg(Reg::Sp),
+                                 Operand::Reg(Reg::Bp)),
+        ];
+        m.execute(&instructions);
+        assert_eq!(m.reg_value(Reg::Ax), 0x0000);
+        assert_eq!(m.reg_value(Reg::Bx), 0x9CA5);
+        assert_eq!(m.reg_value(Reg::Cx), 0x0000);
+        assert_eq!(m.reg_value(Reg::Dx), 0x000A);
+        assert_eq!(m.reg_value(Reg::Sp), 0x0063);
+        assert_eq!(m.reg_value(Reg::Bp), 0x0062);
+        assert_eq!(m.reg_value(Reg::Si), 0x0000);
+        assert_eq!(m.reg_value(Reg::Di), 0x0000);
+        assert_eq!(m.seg_reg_value(SegReg::Cs), 0x0000);
+        assert_eq!(m.seg_reg_value(SegReg::Ds), 0x0000);
+        assert_eq!(m.seg_reg_value(SegReg::Es), 0x0000);
+        assert_eq!(m.seg_reg_value(SegReg::Ss), 0x0000);
+
+        assert_eq!(m.read_flag(Flag::Zero), FlagValue::Reset);
+        assert_eq!(m.read_flag(Flag::Sign), FlagValue::Set);
+        assert_eq!(m.read_flag(Flag::Parity), FlagValue::Set);
+        assert_eq!(m.read_flag(Flag::Carry), FlagValue::Set);
+        assert_eq!(m.read_flag(Flag::Auxillary), FlagValue::Set);
+    }
+
+    #[test]
+    fn test_deocde_arithmetic(){
+        assert_eq!(decode_instruction(&[0x81, 0xc3, 0x30, 0x75]),
+                   Ok((4, Instruction::src_dst(Command::Add,
+                                               Operand::ImmU16(30000),
+                                               Operand::Reg(Reg::Bx)))));
+        assert_eq!(decode_instruction(&[0x81, 0xc3, 0x10, 0x27]),
+                   Ok((4, Instruction::src_dst(Command::Add,
+                                               Operand::ImmU16(10000),
+                                               Operand::Reg(Reg::Bx)))));
+        assert_eq!(decode_instruction(&[0x81, 0xeb, 0x88, 0x13]),
+                   Ok((4, Instruction::src_dst(Command::Sub,
+                                               Operand::ImmU16(5000),
+                                               Operand::Reg(Reg::Bx)))));
+        assert_eq!(decode_instruction(&[0x81, 0xeb, 0x88, 0x13]),
+                   Ok((4, Instruction::src_dst(Command::Sub,
+                                               Operand::ImmU16(5000),
+                                               Operand::Reg(Reg::Bx)))));
+        assert_eq!(decode_instruction(&[0xbb, 0x01, 0x00]),
+                   Ok((3, Instruction::src_dst(Command::Mov,
+                                               Operand::ImmI16(1),
+                                               Operand::Reg(Reg::Bx)))));
+        assert_eq!(decode_instruction(&[0xb9, 0x64, 0x00]),
+                   Ok((3, Instruction::src_dst(Command::Mov,
+                                               Operand::ImmI16(100),
+                                               Operand::Reg(Reg::Cx)))));
+        assert_eq!(decode_instruction(&[0x01, 0xcb]),
+                   Ok((2, Instruction::src_dst(Command::Add,
+                                               Operand::Reg(Reg::Cx),
+                                               Operand::Reg(Reg::Bx)))));
+        assert_eq!(decode_instruction(&[0xba, 0x0a, 0x00]),
+                   Ok((3, Instruction::src_dst(Command::Mov,
+                                               Operand::ImmI16(10),
+                                               Operand::Reg(Reg::Dx)))));
+        assert_eq!(decode_instruction(&[0x29, 0xd1]),
+                   Ok((2, Instruction::src_dst(Command::Sub,
+                                               Operand::Reg(Reg::Dx),
+                                               Operand::Reg(Reg::Cx)))));
+        assert_eq!(decode_instruction(&[0x81, 0xc3, 0x40, 0x9c]),
+                   Ok((4, Instruction::src_dst(Command::Add,
+                                               Operand::ImmU16(40000),
+                                               Operand::Reg(Reg::Bx)))));
+        assert_eq!(decode_instruction(&[0x83, 0xc1, 0xa6]),
+                   Ok((3, Instruction::src_dst(Command::Add,
+                                               Operand::ImmU8((-90 as i8) as u8),
+                                               Operand::Reg(Reg::Cx)))));
+        assert_eq!(decode_instruction(&[0xbc, 0x63, 0x00]),
+                   Ok((3, Instruction::src_dst(Command::Mov,
+                                               Operand::ImmI16(99),
+                                               Operand::Reg(Reg::Sp)))));
+        assert_eq!(decode_instruction(&[0xbd, 0x62, 0x00]),
+                   Ok((3, Instruction::src_dst(Command::Mov,
+                                               Operand::ImmI16(98),
+                                               Operand::Reg(Reg::Bp)))));
+        assert_eq!(decode_instruction(&[0x39, 0xe5]),
+                   Ok((2, Instruction::src_dst(Command::Cmp,
+                                               Operand::Reg(Reg::Sp),
+                                               Operand::Reg(Reg::Bp)))));
     }
 }
