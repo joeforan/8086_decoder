@@ -643,6 +643,7 @@ struct Machine {
     registers: [u16; 8],
     seg_regs: [u16; 4],
     flags: u16,
+    ip: usize,
     memory: [u8; 64*1024]
 }
 
@@ -651,6 +652,7 @@ impl Machine {
         Machine { registers: [0; 8],
                   seg_regs: [0; 4],
                   flags: 0,
+                  ip: 0,
                   memory: [0; 64*1024]
         }
     }
@@ -661,16 +663,23 @@ impl Machine {
         if end_adr > 64*1024 {
             end_adr = 64*1024;
         }
-        let copy_size = 64*1024 - adr;
         self.memory[adr..end_adr].copy_from_slice(contents);
     }
 
     fn run(&mut self){
-
+        loop {
+            match decode_instruction(&mut self.memory[self.ip..64*1024]) {
+                Ok(instruction) => {
+                    self.execute_single_instruction(&instruction);
+                    self.ip += instruction.code_len as usize;
+                },
+                Err(_) => { break; }
+            }
+        }
     }
 
-    fn read_ip(&self) -> u16 {
-        0
+    fn read_ip(&self) -> usize {
+        self.ip
     }
 
 
@@ -776,45 +785,48 @@ impl Machine {
 
     }
 
-    fn get_op_value(&self, operand: Option<Operand>) -> u16 {
+    fn get_op_value(&self, operand: Option<Operand>) -> Result<u16, String> {
         use Operand::*;
         match operand {
             Some(o) => {
                 match o {
-                    Reg(r) => { self.reg_value(r) },
-                    ImmU8(v) => (v as i8) as u16,
-                    ImmI8(v) => v as u16,
-                    ImmU16(v) => v as u16,
-                    ImmI16(v) => v as u16,
-                    SegReg(sr) => { self.seg_reg_value(sr)},
-                    _ => panic!("Invalid src for mov command: {:?}", o)
+                    Reg(r) => { Ok(self.reg_value(r)) },
+                    ImmU8(v) => Ok((v as i8) as u16),
+                    ImmI8(v) => Ok(v as u16),
+                    ImmU16(v) => Ok(v as u16),
+                    ImmI16(v) => Ok(v as u16),
+                    SegReg(sr) => { Ok(self.seg_reg_value(sr)) },
+                    _ => Err(String::from(format!("Invalid src for mov command: {:?}", o)))
                 }
             },
-            None => panic!("No source indicated for mov command.")
+            None => Err(String::from(format!("No source indicated for mov command.")))
         }
     }
 
 
-    fn execute_mov_instruction(&mut self, instruction: &Instruction) {
+    fn execute_mov_instruction(&mut self, instruction: &Instruction) -> Result<(), String>
+    {
         //assert!(instruction.cmd == Command::Mov);
         use Operand::*;
-        let src_value = self.get_op_value(instruction.op2);
+        let src_value = self.get_op_value(instruction.op2)?;
         match instruction.op1 {
             Some(o) => {
                 match o {
                     Reg(r) => {self.write_reg(r, src_value);},
                     SegReg(sr) => {self.write_seg_reg(sr, src_value);},
-                    _ => panic!("Invalid dst for mov command: {:?}", o)
+                    _ => { return Err(String::from(format!("Invalid dst for mov command: {:?}", o))); }
                 }
             }
-            None => panic!("No destination indicated for mov command.")
+            None => {return Err(String::from(format!("No destination indicated for mov command.")));}
         }
+        Ok(())
     }
 
-    fn execute_arithmetic_instruction(&mut self, instruction: &Instruction) {
+    fn execute_arithmetic_instruction(&mut self, instruction: &Instruction) -> Result<(), String>
+    {
         use Operand::*;
         use Command::*;
-        let src_value = self.get_op_value(instruction.op2);
+        let src_value = self.get_op_value(instruction.op2)?;
         let (aux, res) = match instruction.op1{
             Some(o) => {
                 match o {
@@ -835,35 +847,42 @@ impl Machine {
 
                                 (src_value & 0xF > (prev & 0xF), v)
                             },
-                            _ => panic!("invalid arithmetic command!")
+                            _ => {return Err(String::from(format!("invalid arithmetic command!"))); }
                         }
                     },
-                    _ => panic!("invlaid dst operand for arithmetic command ")
+                    _ => { return Err(String::from(format!("invlaid dst operand for arithmetic command ")));}
                 }
             },
-            None => panic!("Arithmetic command does not have valid destination")
+            None => { return Err(String::from(format!("Arithmetic command does not have valid destination")));}
         };
         self.set_flag(Flag::Zero, if res == 0 { FlagValue::Set } else {FlagValue::Reset});
         self.set_flag(Flag::Sign, if res < 0 { FlagValue::Set } else {FlagValue::Reset});
         self.set_flag(Flag::Carry, if (res & 0x10000) != 0 { FlagValue::Set } else { FlagValue::Reset });
         self.set_flag(Flag::Parity, if is_parity((res & 0xFFFF) as u16) { FlagValue::Set } else { FlagValue::Reset });
         self.set_flag(Flag::Auxillary, if aux { FlagValue::Set} else {FlagValue::Reset});
+        Ok(())
     }
 
-    fn execute_single_instruction(&mut self, instruction: &Instruction) {
+    fn execute_single_instruction(&mut self, instruction: &Instruction) -> Result<(), String>
+    {
         match instruction.cmd {
             Command::Mov => self.execute_mov_instruction(instruction),
             Command::Add |
             Command::Sub |
             Command::Cmp => self.execute_arithmetic_instruction(instruction),
-            _ => {}
+            _ => Err(String::from(format!("Could not execute instruction {}", instruction.to_str(None))))
         }
     }
 
-    fn execute(&mut self, instructions: &Vec<Instruction>) {
+    fn execute(&mut self, instructions: &Vec<Instruction>) -> Result<(), String>
+    {
         for i in instructions {
-            self.execute_single_instruction(&i)
+            match self.execute_single_instruction(&i) {
+                Ok(_) => {},
+                Err(e) => {return Err(e);}
+            }
         }
+        Ok(())
     }
 
     fn print_status(&self) {
