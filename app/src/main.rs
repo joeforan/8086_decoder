@@ -642,16 +642,37 @@ fn get_flag_shift(f: Flag) -> u8 {
 struct Machine {
     registers: [u16; 8],
     seg_regs: [u16; 4],
-    flags: u16
+    flags: u16,
+    memory: [u8; 64*1024]
 }
 
 impl Machine {
     fn new() -> Self {
         Machine { registers: [0; 8],
                   seg_regs: [0; 4],
-                  flags: 0
+                  flags: 0,
+                  memory: [0; 64*1024]
         }
     }
+
+    fn set_mem(&mut self, adr: usize, contents: &[u8]) {
+        let mut end_adr = adr + contents.len();
+
+        if end_adr > 64*1024 {
+            end_adr = 64*1024;
+        }
+        let copy_size = 64*1024 - adr;
+        self.memory[adr..end_adr].copy_from_slice(contents);
+    }
+
+    fn run(&mut self){
+
+    }
+
+    fn read_ip(&self) -> u16 {
+        0
+    }
+
 
     fn get_reg_idx(r: Reg) -> usize {
         use Reg::*;
@@ -3606,5 +3627,35 @@ mod test {
                    Ok(Instruction::src_dst(Command::Cmp,
                                            Operand::Reg(Reg::Sp),
                                            Operand::Reg(Reg::Bp), 2)));
+    }
+
+    #[test]
+    fn test_set_mem_and_decode(){
+        let mem = [0xb9, 0xc8, 0x00, 0x89, 0xcb, 0x81, 0xc1, 0xe8, 0x03, 0xbb, 0xd0, 0x07, 0x29, 0xd9];
+        let mut m: Machine = Machine::new();
+        m.set_mem(0, &mem);
+        m.run();
+
+        assert_eq!(m.reg_value(Reg::Ax), 0x0000);
+        assert_eq!(m.reg_value(Reg::Bx), 0x07d0);
+        assert_eq!(m.reg_value(Reg::Cx), 0xFCE0);
+        assert_eq!(m.reg_value(Reg::Dx), 0x0000);
+        assert_eq!(m.reg_value(Reg::Sp), 0x0000);
+        assert_eq!(m.reg_value(Reg::Bp), 0x0000);
+        assert_eq!(m.reg_value(Reg::Si), 0x0000);
+        assert_eq!(m.reg_value(Reg::Di), 0x0000);
+        assert_eq!(m.seg_reg_value(SegReg::Cs), 0x0000);
+        assert_eq!(m.seg_reg_value(SegReg::Ds), 0x0000);
+        assert_eq!(m.seg_reg_value(SegReg::Es), 0x0000);
+        assert_eq!(m.seg_reg_value(SegReg::Ss), 0x0000);
+
+        assert_eq!(m.read_ip(), 0x000E);
+
+        assert_eq!(m.read_flag(Flag::Zero), FlagValue::Reset);
+        assert_eq!(m.read_flag(Flag::Sign), FlagValue::Set);
+        assert_eq!(m.read_flag(Flag::Parity), FlagValue::Reset);
+        assert_eq!(m.read_flag(Flag::Carry), FlagValue::Set);
+        assert_eq!(m.read_flag(Flag::Auxillary), FlagValue::Reset);
+
     }
 }
