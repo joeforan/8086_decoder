@@ -236,7 +236,8 @@ struct Instruction
     lock: bool,
     segment: Option<SegReg>,
     is_intersegment: bool,
-    is_far: bool
+    is_far: bool,
+    code_len: u8
 }
 
 impl Command {
@@ -458,7 +459,7 @@ impl Operand {
 }
 
 impl Instruction {
-    fn no_op(cmd: Command) -> Self
+    fn no_op(cmd: Command, code_len: u8) -> Self
     {
         Instruction {
             cmd: cmd,
@@ -468,22 +469,25 @@ impl Instruction {
             lock: false,
             segment: None,
             is_intersegment: false,
-            is_far: false
+            is_far: false,
+            code_len: code_len
         }
     }
     fn single_op(cmd: Command,
-                 op: Operand) -> Self
+                 op: Operand,
+                 code_len: u8) -> Self
     {
-        let mut ret = Self::no_op(cmd);
+        let mut ret = Self::no_op(cmd, code_len);
         ret.op1 = Some(op);
         ret
     }
 
     fn src_dst(cmd: Command,
                 src: Operand,
-                dst: Operand) -> Self
+               dst: Operand,
+               code_len: u8) -> Self
     {
-        let mut ret = Self::single_op(cmd, dst);
+        let mut ret = Self::single_op(cmd, dst, code_len);
         ret.op2 = Some(src);
         ret
     }
@@ -491,7 +495,7 @@ impl Instruction {
     fn jumpi8(cmd: Command,
             offset: i8) -> Self
     {
-        let mut ret = Self::no_op(cmd);
+        let mut ret = Self::no_op(cmd, 2);
         ret.op1 = Some(Operand::Offset8(offset));
         ret
     }
@@ -499,7 +503,7 @@ impl Instruction {
     fn jumpi16(cmd: Command,
             offset: i16) -> Self
     {
-        let mut ret = Self::no_op(cmd);
+        let mut ret = Self::no_op(cmd, 3);
         ret.op1 = Some(Operand::Offset16(offset));
         ret
     }
@@ -1273,11 +1277,11 @@ fn repeat_operand_from_byte(byte: u8) -> Result<Operand, String>
 
 fn get_mem_ptr_and_displacement(data: &[u8],
                                 rm_code: ThreeBitValue,
-                                mod_code: TwoBitValue) -> (usize, Operand)
+                                mod_code: TwoBitValue) -> (u8, Operand)
 {
     use TwoBitValue::*;
     use ThreeBitValue::*;
-    let mut data_offset: usize = 0;
+    let mut data_offset = 0;
 
     if (mod_code == DBV00) && (rm_code == TBV110) {
         let disp = read_u16_val(&data[2..4]);
@@ -1313,7 +1317,7 @@ fn get_mem_ptr_and_displacement(data: &[u8],
     }
 }
 
-fn decode_imm_reg_instruction(cmd: Command, data: &[u8]) -> Result<(usize, Instruction), String> {
+fn decode_imm_reg_instruction(cmd: Command, data: &[u8]) -> Result<Instruction, String> {
     let immw_flag = get_bit_value((data[0] & IMMW_MASK) >> IMMW_SHFT);
     let immreg_code = get_three_bit_value((data[0] & IMMREG_MASK) >> IMMREG_SHFT);
     let immreg_operand = get_reg_operand(immw_flag, immreg_code);
@@ -1322,10 +1326,10 @@ fn decode_imm_reg_instruction(cmd: Command, data: &[u8]) -> Result<(usize, Instr
         BitValue::BV0 => (2, Operand::ImmI8(data[1] as i8)),
         BitValue::BV1 => (3, Operand::ImmI16(read_i16_val(&data[1..3])))
     };
-    Ok((offset, Instruction::src_dst(cmd, src, immreg_operand)))
+    Ok(Instruction::src_dst(cmd, src, immreg_operand, offset))
 }
 
-fn decode_imm_rm_instruction(cmd: Command, data: &[u8]) -> Result<(usize, Instruction), String> {
+fn decode_imm_rm_instruction(cmd: Command, data: &[u8]) -> Result<Instruction, String> {
     use BitValue::*;
     use TwoBitValue::*;
     use ThreeBitValue::*;
@@ -1361,27 +1365,42 @@ fn decode_imm_rm_instruction(cmd: Command, data: &[u8]) -> Result<(usize, Instru
 
         if (data[0] & 0xFE) == 0xC6 {
             return match w_flag {
-                BV0 =>  Ok((data_offset + 3, Instruction::src_dst(sub_code, Operand::ImmU8(data[data_idx]), reg_operand).size(DataSize::Byte))),
-                BV1 =>  Ok((data_offset + 4, Instruction::src_dst(sub_code, Operand::ImmU16(read_u16_val(&data[data_idx..data_idx+2])),
-                                                                reg_operand).size(DataSize::Word)))
+                BV0 =>  Ok(Instruction::src_dst(sub_code,
+                                                Operand::ImmU8(data[data_idx]),
+                                                reg_operand,
+                                                data_offset + 3)
+                           .size(DataSize::Byte)),
+                BV1 =>  Ok(Instruction::src_dst(sub_code,
+                                                Operand::ImmU16(read_u16_val(&data[data_idx..data_idx+2])),
+                                                reg_operand,
+                                                data_offset + 4)
+                           .size(DataSize::Word))
             }
         } else {
             return match w_flag {
-                BV0 =>  Ok((data_offset + 3,
-                            Instruction::src_dst(sub_code, Operand::ImmU8(data[data_idx]), reg_operand).size(DataSize::Byte))),
+                BV0 =>  Ok(Instruction::src_dst(sub_code, Operand::ImmU8(data[data_idx]), reg_operand, data_offset + 3).size(DataSize::Byte)),
                 BV1 =>  {
                     if use_s_flag {
                         let s_flag = (data[0] & S_MASK) >> S_SHFT;
                         if s_flag == 0 {
-                            Ok((data_offset + 4,
-                                Instruction::src_dst(sub_code, Operand::ImmU16(read_u16_val(&data[data_idx..data_idx+2])), reg_operand).size(DataSize::Word)))
+                            Ok(Instruction::src_dst(sub_code,
+                                                    Operand::ImmU16(read_u16_val(&data[data_idx..data_idx+2])),
+                                                    reg_operand,
+                                                    data_offset + 4)
+                               .size(DataSize::Word))
                         } else {
-                            Ok((data_offset + 3,
-                                Instruction::src_dst(sub_code, Operand::ImmU8(data[data_idx]), reg_operand).size(DataSize::Word)))
+                            Ok(Instruction::src_dst(sub_code,
+                                                    Operand::ImmU8(data[data_idx]),
+                                                    reg_operand,
+                                                    data_offset + 3)
+                               .size(DataSize::Word))
                         }
                     } else {
-                        Ok((data_offset + 4,
-                            Instruction::src_dst(sub_code, Operand::ImmU16(read_u16_val(&data[data_idx..data_idx+2])), reg_operand).size(DataSize::Word)))
+                    Ok(Instruction::src_dst(sub_code,
+                                            Operand::ImmU16(read_u16_val(&data[data_idx..data_idx+2])),
+                                            reg_operand,
+                                            data_offset + 4)
+                       .size(DataSize::Word))
                     }
                 }
             }
@@ -1390,22 +1409,22 @@ fn decode_imm_rm_instruction(cmd: Command, data: &[u8]) -> Result<(usize, Instru
         let rm_operand = get_reg_operand(w_flag, rm_code);
         let data_idx: usize = 2;
         if cmd == Mov {
-            Ok((3, Instruction::src_dst(cmd,
-                                        Operand::ImmU8(data[data_idx]),
-                                        rm_operand)))
+            Ok(Instruction::src_dst(cmd,
+                                    Operand::ImmU8(data[data_idx]),
+                                    rm_operand, 3))
         } else {
             let sw_flag = get_two_bit_value(data[0] & 0x3);
             match sw_flag {
-                DBV01 => Ok((4, Instruction::src_dst(sub_code,
-                                                     Operand::ImmU16(read_u16_val(&data[data_idx..data_idx+2])),
-                                                     rm_operand))),
-                _ => Ok((3, Instruction::src_dst(sub_code, Operand::ImmU8(data[data_idx]), rm_operand)))
+                DBV01 => Ok(Instruction::src_dst(sub_code,
+                                                 Operand::ImmU16(read_u16_val(&data[data_idx..data_idx+2])),
+                                                 rm_operand, 4)),
+                _ => Ok(Instruction::src_dst(sub_code, Operand::ImmU8(data[data_idx]), rm_operand, 3))
             }
         }
     }
 }
 
-fn decode_acc_mem_instruction(cmd: Command, data: &[u8]) -> Result<(usize, Instruction), String> {
+fn decode_acc_mem_instruction(cmd: Command, data: &[u8]) -> Result<Instruction, String> {
     use BitValue::*;
     use ThreeBitValue::*;
 
@@ -1414,22 +1433,22 @@ fn decode_acc_mem_instruction(cmd: Command, data: &[u8]) -> Result<(usize, Instr
     let val = read_u16_val(&data[1..2+w_flag as usize]);
     let d_flag = get_bit_value((data[0] & D_MASK) >> D_SHFT);
     match d_flag {
-        BV0 => Ok((3, Instruction::src_dst(cmd, Operand::PtrDir(val), reg_operand))),
-        BV1 => Ok((3, Instruction::src_dst(cmd, reg_operand, Operand::PtrDir(val))))
+        BV0 => Ok(Instruction::src_dst(cmd, Operand::PtrDir(val), reg_operand, 3)),
+        BV1 => Ok(Instruction::src_dst(cmd, reg_operand, Operand::PtrDir(val), 3))
     }
 }
 
-fn decode_imm_acc_instruction(cmd: Command, data: &[u8]) -> Result<(usize, Instruction), String> {
+fn decode_imm_acc_instruction(cmd: Command, data: &[u8]) -> Result<Instruction, String> {
     use BitValue::*;
     use ThreeBitValue::*;
 
     let w_flag = get_bit_value((data[0] & W_MASK) >> W_SHFT);
     let reg_operand = get_reg_operand(w_flag, TBV000);
     match w_flag {
-        BV0 => Ok((2, Instruction::src_dst(cmd, Operand::ImmI8(data[1] as i8), reg_operand))),
+        BV0 => Ok(Instruction::src_dst(cmd, Operand::ImmI8(data[1] as i8), reg_operand, 2)),
         BV1 => {
             let val = read_i16_val(&data[1..2+w_flag as usize]);
-            Ok((3, Instruction::src_dst(cmd, Operand::ImmI16(val), reg_operand)))
+            Ok(Instruction::src_dst(cmd, Operand::ImmI16(val), reg_operand, 3))
         }
     }
 }
@@ -1437,7 +1456,7 @@ fn decode_imm_acc_instruction(cmd: Command, data: &[u8]) -> Result<(usize, Instr
 fn decode_reg_rm_strings_with_indicated_dw(cmd: Command,
                                           data: &[u8],
                                           w_flag: BitValue,
-                                          d_flag: BitValue) -> Result<(usize, Instruction), String>
+                                          d_flag: BitValue) -> Result<Instruction, String>
 {
     use BitValue::*;
     use TwoBitValue::*;
@@ -1446,7 +1465,7 @@ fn decode_reg_rm_strings_with_indicated_dw(cmd: Command,
     let mod_code = get_two_bit_value((data[1] & MOD_MASK) >> MOD_SHFT);
     let rm_code = get_three_bit_value((data[1] & RM_MASK) >> RM_SHFT);
     let reg_operand = get_reg_operand(w_flag, reg_code);
-    let mut offset: usize = 2;
+    let mut offset: u8 = 2;
     let rm_operand = match mod_code {
         DBV11 => get_reg_operand(w_flag, rm_code),
         _ => {
@@ -1462,25 +1481,25 @@ fn decode_reg_rm_strings_with_indicated_dw(cmd: Command,
         (rm_operand, reg_operand)
     };
 
-    Ok((offset, Instruction::src_dst(cmd, src, dst)))
+    Ok(Instruction::src_dst(cmd, src, dst, offset))
 }
 
-fn decode_reg_rm_with_disp_instruction(cmd: Command, data: &[u8]) -> Result<(usize, Instruction), String> {
+fn decode_reg_rm_with_disp_instruction(cmd: Command, data: &[u8]) -> Result<Instruction, String> {
     let w_flag = get_bit_value((data[0] & W_MASK) >> W_SHFT);
     let d_flag = get_bit_value((data[0] & D_MASK) >> D_SHFT);
     decode_reg_rm_strings_with_indicated_dw(cmd, data, w_flag, d_flag)
 }
 
-fn decode_reg_rm_with_disp_instruction_d1(cmd: Command, data: &[u8]) -> Result<(usize, Instruction), String> {
+fn decode_reg_rm_with_disp_instruction_d1(cmd: Command, data: &[u8]) -> Result<Instruction, String> {
     let w_flag = get_bit_value((data[0] & W_MASK) >> W_SHFT);
     decode_reg_rm_strings_with_indicated_dw(cmd, data, w_flag, BitValue::BV1)
 }
 
-fn decode_reg_rm_with_disp_instruction_d1w1(cmd: Command, data: &[u8]) -> Result<(usize, Instruction), String> {
+fn decode_reg_rm_with_disp_instruction_d1w1(cmd: Command, data: &[u8]) -> Result<Instruction, String> {
     decode_reg_rm_strings_with_indicated_dw(cmd, data, BitValue::BV1, BitValue::BV1)
 }
 
-fn decode_mov_with_sr_instruction(cmd: Command, data: &[u8]) -> Result<(usize, Instruction), String> {
+fn decode_mov_with_sr_instruction(cmd: Command, data: &[u8]) -> Result<Instruction, String> {
     let sr_code = get_two_bit_value((data[1] & SR_MASK) >> SR_SHFT);
     let seg_reg_operand = get_seg_reg_operand(sr_code);
 
@@ -1488,24 +1507,25 @@ fn decode_mov_with_sr_instruction(cmd: Command, data: &[u8]) -> Result<(usize, I
     let rm_code = get_three_bit_value((data[1] & RM_MASK) >> RM_SHFT);
     let t = get_mem_ptr_and_displacement(data, rm_code, mod_code);
 
-    Ok((t.0 + 2, if (data[0] & 0x2) == 0x2 {
-        Instruction::src_dst(cmd, t.1, seg_reg_operand)
+    let offset = t.0 + 2;
+    Ok(if (data[0] & 0x2) == 0x2 {
+        Instruction::src_dst(cmd, t.1, seg_reg_operand, offset)
     } else {
-        Instruction::src_dst(cmd, seg_reg_operand, t.1)
-    }))
+        Instruction::src_dst(cmd, seg_reg_operand, t.1, offset)
+    })
 }
 
-fn decode_jmp_i8_instruction(cmd: Command, data: &[u8]) -> Result<(usize, Instruction), String> {
+fn decode_jmp_i8_instruction(cmd: Command, data: &[u8]) -> Result<Instruction, String> {
     let jump_offset: i8 = data[1] as i8;
-    Ok((2, Instruction::jumpi8(cmd, jump_offset)))
+    Ok(Instruction::jumpi8(cmd, jump_offset))
 }
 
-fn decode_jmp_i16_instruction(cmd: Command, data: &[u8]) -> Result<(usize, Instruction), String> {
+fn decode_jmp_i16_instruction(cmd: Command, data: &[u8]) -> Result<Instruction, String> {
     let jump_offset: i16 = read_i16_val(&data[1..3]);
-    Ok((3, Instruction::jumpi16(cmd, jump_offset)))
+    Ok(Instruction::jumpi16(cmd, jump_offset))
 }
 
-fn decode_shift_rot_instruction(_cmd: Command, data: &[u8]) -> Result<(usize, Instruction), String> {
+fn decode_shift_rot_instruction(_cmd: Command, data: &[u8]) -> Result<Instruction, String> {
     use BitValue::*;
     use TwoBitValue::*;
     use ThreeBitValue::*;
@@ -1527,24 +1547,25 @@ fn decode_shift_rot_instruction(_cmd: Command, data: &[u8]) -> Result<(usize, In
     let rm_code = get_three_bit_value((data[1] & RM_MASK) >> RM_SHFT);
     let t = get_mem_ptr_and_displacement(data, rm_code, mod_code);
 
+    let code_len = t.0 + 2;
     Ok(match mod_code {
         DBV11 => {
             match v_flag {
-                BV0 => (2 + t.0, Instruction::src_dst(sub_cmd, Operand::ImmU8(1), t.1)),
-                BV1 => (2 + t.0, Instruction::src_dst(sub_cmd, Operand::Reg(Reg::Cl), t.1))
+                BV0 => Instruction::src_dst(sub_cmd, Operand::ImmU8(1), t.1, code_len),
+                BV1 => Instruction::src_dst(sub_cmd, Operand::Reg(Reg::Cl), t.1, code_len)
             }
         },
         _ => {
             let size = match w_flag { BV0 => DataSize::Byte, BV1 => DataSize::Word};
             match v_flag {
-                BV0 => (2 + t.0, Instruction::src_dst(sub_cmd, Operand::ImmU8(1), t.1).size(size)),
-                BV1 => (2 + t.0, Instruction::src_dst(sub_cmd, Operand::Reg(Reg::Cl), t.1).size(size))
+                BV0 => Instruction::src_dst(sub_cmd, Operand::ImmU8(1), t.1, code_len).size(size),
+                BV1 => Instruction::src_dst(sub_cmd, Operand::Reg(Reg::Cl), t.1, code_len).size(size)
             }
         }
     })
 }
 
-fn decode_rm_with_disp_instruction(_cmd: Command, data: &[u8]) -> Result<(usize, Instruction), String> {
+fn decode_rm_with_disp_instruction(_cmd: Command, data: &[u8]) -> Result<Instruction, String> {
     use Command::*;
     use BitValue::*;
     use TwoBitValue::*;
@@ -1584,37 +1605,38 @@ fn decode_rm_with_disp_instruction(_cmd: Command, data: &[u8]) -> Result<(usize,
     let rm_code = get_three_bit_value((data[1] & RM_MASK) >> RM_SHFT);
     let t = get_mem_ptr_and_displacement(data, rm_code, mod_code);
 
+    let code_len = 2 + t.0;
     Ok(if use_w_flag && (mod_code != DBV11) {
         let w_flag = get_bit_value((data[0] & W_MASK) >> W_SHFT);
         let size = match w_flag {
             BV0 => DataSize::Byte,
             BV1 => DataSize::Word
         };
-        (2 + t.0, Instruction::single_op(sub_cmd, t.1).size(size))
+        Instruction::single_op(sub_cmd, t.1, code_len).size(size)
     } else {
         if use_far {
-            (2 + t.0, Instruction::single_op(sub_cmd, t.1).set_far())
+            Instruction::single_op(sub_cmd, t.1, code_len).set_far()
         } else {
-            (2 + t.0, Instruction::single_op(sub_cmd, t.1))
+            Instruction::single_op(sub_cmd, t.1, code_len)
         }
     })
 }
 
-fn decode_single_byte_instruction_with_sr(cmd: Command, data: &[u8]) -> Result<(usize, Instruction), String> {
+fn decode_single_byte_instruction_with_sr(cmd: Command, data: &[u8]) -> Result<Instruction, String> {
     let reg_operand = get_seg_reg_operand(get_two_bit_value((data[0] & 0x18) >> 3));
-    Ok((1, Instruction::single_op(cmd, reg_operand)))
+    Ok(Instruction::single_op(cmd, reg_operand, 1))
 }
 
-fn decode_single_byte_instruction_with_reg(cmd: Command, data: &[u8]) -> Result<(usize, Instruction), String> {
+fn decode_single_byte_instruction_with_reg(cmd: Command, data: &[u8]) -> Result<Instruction, String> {
     let reg_operand = get_reg_operand(BitValue::BV1, get_three_bit_value(data[0] & 0x7));
     if cmd == Command::Xchg {
-        Ok((1, Instruction::src_dst(cmd, Operand::Reg(Reg::Ax), reg_operand)))
+        Ok(Instruction::src_dst(cmd, Operand::Reg(Reg::Ax), reg_operand, 1))
     } else {
-        Ok((1, Instruction::single_op(cmd, reg_operand)))
+        Ok(Instruction::single_op(cmd, reg_operand, 1))
     }
 }
 
-fn decode_inout_instruction(cmd: Command, data: &[u8]) -> Result<(usize, Instruction), String> {
+fn decode_inout_instruction(cmd: Command, data: &[u8]) -> Result<Instruction, String> {
     use BitValue::*;
     use Reg::*;
     use Command::*;
@@ -1628,61 +1650,58 @@ fn decode_inout_instruction(cmd: Command, data: &[u8]) -> Result<(usize, Instruc
         (2, Operand::ImmU8(data[1]))
     };
     Ok(if cmd == In {
-        (offset, Instruction::src_dst(cmd, operand2, operand1))
+        Instruction::src_dst(cmd, operand2, operand1, offset)
     } else {
-        (offset, Instruction::src_dst(cmd, operand1, operand2))
+        Instruction::src_dst(cmd, operand1, operand2, offset)
     })
 }
 
-fn decode_ascii_adjust_instruction(cmd: Command, data: &[u8]) -> Result<(usize, Instruction), String> {
+fn decode_ascii_adjust_instruction(cmd: Command, data: &[u8]) -> Result<Instruction, String> {
     if data[1] != 0x0A {
         Err(String::from("Invalid second byte for ascii adjust for mul/div instruction"))
     } else {
-        Ok((2, Instruction::no_op(cmd)))
+        Ok(Instruction::no_op(cmd, 2))
     }
 }
 
-fn decode_repeat_instruction(cmd: Command, data: &[u8]) -> Result<(usize, Instruction), String> {
+fn decode_repeat_instruction(cmd: Command, data: &[u8]) -> Result<Instruction, String> {
     match repeat_operand_from_byte(data[1]) {
-        Ok(op) => Ok((2, Instruction::single_op(cmd, op))),
+        Ok(op) => Ok(Instruction::single_op(cmd, op, 2)),
         Err(e) => Err(e)
     }
 }
 
-fn decode_instruction_with_imm_u8(cmd: Command, data: &[u8]) -> Result<(usize, Instruction), String> {
-    Ok((2, Instruction::single_op(cmd, Operand::ImmU8(data[1]))))
-}
-// fn decode_instruction_with_imm_i8(cmd: Command, data: &[u8]) -> Result<usize, Instruction), String> {
-//     (2, Instruction::single_op(cmd, Operand::ImmI8(data[1] as i8)))
-// }
-
-// fn decode_instruction_with_imm_u16(cmd: Command, data: &[u8]) -> Result<usize, Instruction), String> {
-//     (3, Instruction::single_op(cmd, Operand::ImmU16(read_u16_val(&data[1..3]))))
-// }
-
-fn decode_instruction_with_imm_i16(cmd: Command, data: &[u8]) -> Result<(usize, Instruction), String> {
-    Ok((3, Instruction::single_op(cmd, Operand::ImmI16(read_i16_val(&data[1..3])))))
+fn decode_instruction_with_imm_u8(cmd: Command, data: &[u8]) -> Result<Instruction, String> {
+    Ok(Instruction::single_op(cmd, Operand::ImmU8(data[1]), 2))
 }
 
-fn decode_direct_instruction(cmd: Command, _data: &[u8]) -> Result<(usize, Instruction), String> {
-    Ok((1, Instruction::no_op(cmd)))
+fn decode_instruction_with_imm_i16(cmd: Command, data: &[u8]) -> Result<Instruction, String> {
+    Ok(Instruction::single_op(cmd, Operand::ImmI16(read_i16_val(&data[1..3])), 3))
 }
 
-fn decode_intersegment_instruction(cmd: Command, data: &[u8]) -> Result<(usize, Instruction), String> {
-    Ok((5, Instruction::src_dst(cmd,
-                                Operand::ImmU16(read_u16_val(&data[1..3])),
-                                Operand::ImmU16(read_u16_val(&data[3..5])))
-        .set_intersegment()))
+fn decode_direct_instruction(cmd: Command, _data: &[u8]) -> Result<Instruction, String> {
+    Ok(Instruction::no_op(cmd, 1))
 }
 
-fn decode_lock_instruction(_cmd: Command, data: &[u8]) -> Result<(usize, Instruction), String> {
+fn decode_intersegment_instruction(cmd: Command, data: &[u8]) -> Result<Instruction, String> {
+    Ok(Instruction::src_dst(cmd,
+                            Operand::ImmU16(read_u16_val(&data[1..3])),
+                            Operand::ImmU16(read_u16_val(&data[3..5])),
+                            5)
+       .set_intersegment())
+}
+
+fn decode_lock_instruction(_cmd: Command, data: &[u8]) -> Result<Instruction, String> {
     match decode_instruction(&data[1..]) {
-        Ok((sub_len, sub_inst)) => Ok((sub_len + 1, sub_inst.lock())),
+        Ok(sub_inst) => {
+            let mut inst = sub_inst;
+            inst.code_len += 1;
+            Ok(inst.lock()) },
         Err(e) => Err(e)
     }
 }
 
-fn decode_segment_instruction(_cmd: Command, data: &[u8]) -> Result<(usize, Instruction), String> {
+fn decode_segment_instruction(_cmd: Command, data: &[u8]) -> Result<Instruction, String> {
     use SegReg::*;
     let sr = match data[0] {
         0x26 => Es,
@@ -1692,12 +1711,16 @@ fn decode_segment_instruction(_cmd: Command, data: &[u8]) -> Result<(usize, Inst
         _ => { return Err(String::from(format!("Invalid segment prefix: {:x}", data[0]))); }
     };
     match decode_instruction(&data[1..]) {
-        Ok ((sub_len, sub_inst)) => Ok((sub_len + 1, sub_inst.set_segment(sr))),
+        Ok (sub_inst) => {
+            let mut inst = sub_inst;
+            inst.code_len += 1;
+            Ok(inst.set_segment(sr))
+        },
         Err(e) => Err(e)
     }
 }
 
-fn decode_instruction(data: &[u8]) -> Result<(usize, Instruction), String>
+fn decode_instruction(data: &[u8]) -> Result<Instruction, String>
 {
     let opcode = get_opcode_info(data[0]);
     match opcode.opt {
@@ -1732,7 +1755,7 @@ fn decode_instruction(data: &[u8]) -> Result<(usize, Instruction), String>
 
 fn decode_to_text(data: &[u8]) -> Result<(usize, String), String> {
     match decode_instruction(data) {
-        Ok((offset, inst)) => Ok((offset, inst.to_str(None))),
+        Ok(inst) => Ok((inst.code_len as usize, inst.to_str(None))),
         Err(e) => Err(e)
     }
 }
@@ -1752,14 +1775,14 @@ fn decode_from_data(data: &[u8]) -> Result<(String, Vec<Instruction>), String> {
     let mut addresses: BTreeSet<usize> = BTreeSet::new();
 
     while i < n {
-        let (offset, instruction): (usize, Instruction) = {
+        let instruction: Instruction = {
             decode_instruction(&data[i..n])?
         };
 
         let dst = match instruction.offset() {
             None => None,
             Some(jump_offset) => {
-                let jump_address: usize = (i as isize + offset as isize + jump_offset) as usize;
+                let jump_address: usize = (i as isize + instruction.code_len as isize + jump_offset) as usize;
                 labels.insert(jump_address);
                 Some(jump_address)
             }
@@ -1767,7 +1790,7 @@ fn decode_from_data(data: &[u8]) -> Result<(String, Vec<Instruction>), String> {
 
         addresses.insert(i);
         instructions.push((instruction, i, dst));
-        i += offset;
+        i += instruction.code_len as usize;
     }
 
     let mut label_map = HashMap::<usize, String>::new();
@@ -1846,71 +1869,74 @@ mod test {
     fn test_instruction_to_str() {
         assert_eq!(Instruction::src_dst(Command::Mov,
                                         Operand::Reg(Reg::Bx),
-                                        Operand::Reg(Reg::Cx)).to_str(None),
+                                        Operand::Reg(Reg::Cx), 2).to_str(None),
                    "mov cx, bx");
         assert_eq!(Instruction::src_dst(Command::Mov,
                                         Operand::ImmU8(12),
-                                        Operand::Reg(Reg::Si)).to_str(None),
+                                        Operand::Reg(Reg::Si), 3).to_str(None),
                    "mov si, 12");
         assert_eq!(Instruction::src_dst(Command::Mov,
                                         Operand::ImmI16(-3948),
-                                        Operand::Reg(Reg::Dx)).to_str(None),
+                                        Operand::Reg(Reg::Dx), 4).to_str(None),
                    "mov dx, -3948");
         assert_eq!(Instruction::src_dst(Command::Mov,
                                         Operand::PtrDisp((AdrReg::BxSi, 0)),
-                                        Operand::Reg(Reg::Al)).to_str(None),
+                                        Operand::Reg(Reg::Al), 2).to_str(None),
                    "mov al, [bx + si]");
         assert_eq!(Instruction::src_dst(Command::Mov,
                                         Operand::PtrDisp((AdrReg::BxSi, 0)),
-                                        Operand::Reg(Reg::Al)).to_str(None),
+                                        Operand::Reg(Reg::Al), 2).to_str(None),
                    "mov al, [bx + si]");
         assert_eq!(Instruction::src_dst(Command::Mov,
                                         Operand::PtrDisp((AdrReg::BxDi, 4)),
-                                        Operand::Reg(Reg::Ah)).to_str(None),
+                                        Operand::Reg(Reg::Ah), 3).to_str(None),
                    "mov ah, [bx + di + 4]");
         assert_eq!(Instruction::src_dst(Command::Mov,
                                         Operand::PtrDisp((AdrReg::BxSi, 4999)),
-                                        Operand::Reg(Reg::Al)).to_str(None),
+                                        Operand::Reg(Reg::Al), 4).to_str(None),
                    "mov al, [bx + si + 4999]");
         assert_eq!(Instruction::src_dst(Command::Mov,
                                         Operand::PtrDisp((AdrReg::BxDi, -37)),
-                                        Operand::Reg(Reg::Ax)).to_str(None),
+                                        Operand::Reg(Reg::Ax), 3).to_str(None),
                    "mov ax, [bx + di - 37]");
         assert_eq!(Instruction::src_dst(Command::Mov,
                                         Operand::Reg(Reg::Cl),
-                                        Operand::PtrDisp((AdrReg::BpSi, 0))).to_str(None),
+                                        Operand::PtrDisp((AdrReg::BpSi, 0)), 2).to_str(None),
                    "mov [bp + si], cl");
        assert_eq!(Instruction::src_dst(Command::Mov,
                                         Operand::PtrDir(3458),
-                                        Operand::Reg(Reg::Bx)).to_str(None),
+                                        Operand::Reg(Reg::Bx), 4).to_str(None),
                   "mov bx, [3458]");
         assert_eq!(Instruction::jumpi8(Command::Jnz, -2).to_str(Some(&String::from("label2"))),
                    format!("jnz label2"));
         assert_eq!(Instruction::src_dst(Command::Add,
                                         Operand::PtrDisp((AdrReg::BxSi, 0)),
-                                        Operand::Reg(Reg::Bx)).to_str(None),
+                                        Operand::Reg(Reg::Bx), 2).to_str(None),
                    "add bx, [bx + si]");
         assert_eq!(Instruction::src_dst(Command::Mov,
                                         Operand::ImmU8(7),
-                                        Operand::PtrDisp((AdrReg::BpDi, 0)))
+                                        Operand::PtrDisp((AdrReg::BpDi, 0)),
+                                        3)
                    .size(DataSize::Byte)
                    .to_str(None),
                    "mov byte [bp + di], 7");
         assert_eq!(Instruction::src_dst(Command::Mov,
                                         Operand::ImmU8(7),
-                                        Operand::PtrDisp((AdrReg::BpDi, 0))).size(DataSize::Word)
+                                        Operand::PtrDisp((AdrReg::BpDi, 0)),
+                                        3)
+                   .size(DataSize::Word)
                    .to_str(None),
                    "mov word [bp + di], 7");
         assert_eq!(Instruction::single_op(Command::Push,
-                                          Operand::Reg(Reg::Cx)).to_str(None),
+                                          Operand::Reg(Reg::Cx), 1).to_str(None),
                    "push cx");
         assert_eq!(Instruction::single_op(Command::Push,
-                                          Operand::PtrDisp((AdrReg::BxDi, -30)))
+                                          Operand::PtrDisp((AdrReg::BxDi, -30)), 2)
                    .size(DataSize::Word)
                    .to_str(None),
                    "push word [bx + di - 30]");
 
-        assert_eq!(Instruction::no_op(Command::Xlat).to_str(None),
+        assert_eq!(Instruction::no_op(Command::Xlat, 1).to_str(None),
                    "xlat")
 
     }
@@ -3224,28 +3250,28 @@ mod test {
         let instructions = vec![
             Instruction::src_dst(Command::Mov,
                                  Operand::ImmU16(0xdead),
-                                 Operand::Reg(Reg::Ax)),
+                                 Operand::Reg(Reg::Ax), 4),
             Instruction::src_dst(Command::Mov,
                                  Operand::ImmU16(0xbeef),
-                                 Operand::Reg(Reg::Bx)),
+                                 Operand::Reg(Reg::Bx), 4),
             Instruction::src_dst(Command::Mov,
                                  Operand::ImmU16(0xabcd),
-                                 Operand::Reg(Reg::Cx)),
+                                 Operand::Reg(Reg::Cx), 4),
             Instruction::src_dst(Command::Mov,
                                  Operand::ImmU16(0xef01),
-                                 Operand::Reg(Reg::Dx)),
+                                 Operand::Reg(Reg::Dx), 4),
             Instruction::src_dst(Command::Mov,
                                  Operand::ImmU16(0x1),
-                                 Operand::Reg(Reg::Sp)),
+                                 Operand::Reg(Reg::Sp), 4),
             Instruction::src_dst(Command::Mov,
                                  Operand::ImmU16(0x2),
-                                 Operand::Reg(Reg::Bp)),
+                                 Operand::Reg(Reg::Bp), 4),
             Instruction::src_dst(Command::Mov,
                                  Operand::ImmU16(0x3),
-                                 Operand::Reg(Reg::Si)),
+                                 Operand::Reg(Reg::Si), 4),
             Instruction::src_dst(Command::Mov,
                                  Operand::ImmU16(0x4),
-                                 Operand::Reg(Reg::Di)),
+                                 Operand::Reg(Reg::Di), 4),
         ];
 
         m.execute(&instructions);
@@ -3273,40 +3299,40 @@ mod test {
         let instructions = vec![
             Instruction::src_dst(Command::Mov,
                                  Operand::ImmU16(1),
-                                 Operand::Reg(Reg::Ax)),
+                                 Operand::Reg(Reg::Ax), 4),
             Instruction::src_dst(Command::Mov,
                                  Operand::ImmU16(2),
-                                 Operand::Reg(Reg::Bx)),
+                                 Operand::Reg(Reg::Bx), 4),
             Instruction::src_dst(Command::Mov,
                                  Operand::ImmU16(3),
-                                 Operand::Reg(Reg::Cx)),
+                                 Operand::Reg(Reg::Cx), 4),
             Instruction::src_dst(Command::Mov,
                                  Operand::ImmU16(4),
-                                 Operand::Reg(Reg::Dx)),
+                                 Operand::Reg(Reg::Dx), 4),
             Instruction::src_dst(Command::Mov,
                                  Operand::Reg(Reg::Ax),
-                                 Operand::Reg(Reg::Sp)),
+                                 Operand::Reg(Reg::Sp), 4),
             Instruction::src_dst(Command::Mov,
                                  Operand::Reg(Reg::Bx),
-                                 Operand::Reg(Reg::Bp)),
+                                 Operand::Reg(Reg::Bp), 4),
             Instruction::src_dst(Command::Mov,
                                  Operand::Reg(Reg::Cx),
-                                 Operand::Reg(Reg::Si)),
+                                 Operand::Reg(Reg::Si), 4),
             Instruction::src_dst(Command::Mov,
                                  Operand::Reg(Reg::Dx),
-                                 Operand::Reg(Reg::Di)),
+                                 Operand::Reg(Reg::Di), 4),
             Instruction::src_dst(Command::Mov,
                                  Operand::Reg(Reg::Sp),
-                                 Operand::Reg(Reg::Dx)),
+                                 Operand::Reg(Reg::Dx), 4),
             Instruction::src_dst(Command::Mov,
                                  Operand::Reg(Reg::Bp),
-                                 Operand::Reg(Reg::Cx)),
+                                 Operand::Reg(Reg::Cx), 4),
             Instruction::src_dst(Command::Mov,
                                  Operand::Reg(Reg::Si),
-                                 Operand::Reg(Reg::Bx)),
+                                 Operand::Reg(Reg::Bx), 4),
             Instruction::src_dst(Command::Mov,
                                  Operand::Reg(Reg::Di),
-                                 Operand::Reg(Reg::Ax)),
+                                 Operand::Reg(Reg::Ax), 4),
         ];
 
         m.execute(&instructions);
@@ -3326,64 +3352,64 @@ mod test {
         let instructions = vec![
             Instruction::src_dst(Command::Mov,
                                  Operand::ImmU16(0x2222),
-                                 Operand::Reg(Reg::Ax)),
+                                 Operand::Reg(Reg::Ax), 4),
             Instruction::src_dst(Command::Mov,
                                  Operand::ImmU16(0x4444),
-                                 Operand::Reg(Reg::Bx)),
+                                 Operand::Reg(Reg::Bx), 4),
             Instruction::src_dst(Command::Mov,
                                  Operand::ImmU16(0x6666),
-                                 Operand::Reg(Reg::Cx)),
+                                 Operand::Reg(Reg::Cx), 4),
             Instruction::src_dst(Command::Mov,
                                  Operand::ImmU16(0x8888),
-                                 Operand::Reg(Reg::Dx)),
+                                 Operand::Reg(Reg::Dx), 4),
             Instruction::src_dst(Command::Mov,
                                  Operand::Reg(Reg::Ax),
-                                 Operand::SegReg(SegReg::Ss)),
+                                 Operand::SegReg(SegReg::Ss), 4),
             Instruction::src_dst(Command::Mov,
                                  Operand::Reg(Reg::Bx),
-                                 Operand::SegReg(SegReg::Ds)),
+                                 Operand::SegReg(SegReg::Ds), 4),
             Instruction::src_dst(Command::Mov,
                                  Operand::Reg(Reg::Cx),
-                                 Operand::SegReg(SegReg::Es)),
+                                 Operand::SegReg(SegReg::Es), 4),
             Instruction::src_dst(Command::Mov,
                                  Operand::ImmU8(0x11),
-                                 Operand::Reg(Reg::Al)),
+                                 Operand::Reg(Reg::Al), 4),
             Instruction::src_dst(Command::Mov,
                                  Operand::ImmU8(0x33),
-                                 Operand::Reg(Reg::Bh)),
+                                 Operand::Reg(Reg::Bh), 4),
             Instruction::src_dst(Command::Mov,
                                  Operand::ImmU8(0x55),
-                                 Operand::Reg(Reg::Cl)),
+                                 Operand::Reg(Reg::Cl), 4),
             Instruction::src_dst(Command::Mov,
                                  Operand::ImmU8(0x77),
-                                 Operand::Reg(Reg::Dh)),
+                                 Operand::Reg(Reg::Dh), 4),
             Instruction::src_dst(Command::Mov,
                                  Operand::Reg(Reg::Bl),
-                                 Operand::Reg(Reg::Ah)),
+                                 Operand::Reg(Reg::Ah), 4),
             Instruction::src_dst(Command::Mov,
                                  Operand::Reg(Reg::Dh),
-                                 Operand::Reg(Reg::Cl)),
+                                 Operand::Reg(Reg::Cl), 4),
             Instruction::src_dst(Command::Mov,
                                  Operand::Reg(Reg::Ax),
-                                 Operand::SegReg(SegReg::Ss)),
+                                 Operand::SegReg(SegReg::Ss), 4),
             Instruction::src_dst(Command::Mov,
                                  Operand::Reg(Reg::Bx),
-                                 Operand::SegReg(SegReg::Ds)),
+                                 Operand::SegReg(SegReg::Ds), 4),
             Instruction::src_dst(Command::Mov,
                                  Operand::Reg(Reg::Cx),
-                                 Operand::SegReg(SegReg::Es)),
+                                 Operand::SegReg(SegReg::Es), 4),
             Instruction::src_dst(Command::Mov,
                                  Operand::SegReg(SegReg::Ss),
-                                 Operand::Reg(Reg::Sp)),
+                                 Operand::Reg(Reg::Sp), 4),
             Instruction::src_dst(Command::Mov,
                                  Operand::SegReg(SegReg::Ds),
-                                 Operand::Reg(Reg::Bp)),
+                                 Operand::Reg(Reg::Bp), 4),
             Instruction::src_dst(Command::Mov,
                                  Operand::SegReg(SegReg::Es),
-                                 Operand::Reg(Reg::Si)),
+                                 Operand::Reg(Reg::Si), 4),
             Instruction::src_dst(Command::Mov,
                                  Operand::Reg(Reg::Dx),
-                                 Operand::Reg(Reg::Di)),
+                                 Operand::Reg(Reg::Di), 4),
         ];
 
         m.execute(&instructions);
@@ -3412,28 +3438,28 @@ mod test {
         let instructions = vec![
             Instruction::src_dst(Command::Mov,
                                  Operand::ImmI16(-4093),
-                                 Operand::Reg(Reg::Bx)),
+                                 Operand::Reg(Reg::Bx), 4),
             Instruction::src_dst(Command::Mov,
                                  Operand::ImmI16(3841),
-                                 Operand::Reg(Reg::Cx)),
+                                 Operand::Reg(Reg::Cx), 4),
             Instruction::src_dst(Command::Sub,
                                  Operand::Reg(Reg::Cx),
-                                 Operand::Reg(Reg::Bx)),
+                                 Operand::Reg(Reg::Bx), 4),
             Instruction::src_dst(Command::Mov,
                                  Operand::ImmI16(998),
-                                 Operand::Reg(Reg::Sp)),
+                                 Operand::Reg(Reg::Sp), 4),
             Instruction::src_dst(Command::Mov,
                                  Operand::ImmI16(999),
-                                 Operand::Reg(Reg::Bp)),
+                                 Operand::Reg(Reg::Bp), 4),
             Instruction::src_dst(Command::Cmp,
                                  Operand::Reg(Reg::Sp),
-                                 Operand::Reg(Reg::Bp)),
+                                 Operand::Reg(Reg::Bp), 4),
             Instruction::src_dst(Command::Add,
                                  Operand::ImmI16(1027),
-                                 Operand::Reg(Reg::Bp)),
+                                 Operand::Reg(Reg::Bp), 4),
             Instruction::src_dst(Command::Sub,
                                  Operand::ImmI16(2026),
-                                 Operand::Reg(Reg::Bp))
+                                 Operand::Reg(Reg::Bp), 4)
         ];
         m.execute(&instructions);
         assert_eq!(m.reg_value(Reg::Ax), 0x0000);
@@ -3460,46 +3486,46 @@ mod test {
         let instructions = vec![
             Instruction::src_dst(Command::Add,
                                  Operand::ImmU16(30000),
-                                 Operand::Reg(Reg::Bx)),
+                                 Operand::Reg(Reg::Bx), 4),
             Instruction::src_dst(Command::Add,
                                  Operand::ImmU16(10000),
-                                 Operand::Reg(Reg::Bx)),
+                                 Operand::Reg(Reg::Bx), 4),
             Instruction::src_dst(Command::Sub,
                                  Operand::ImmU16(5000),
-                                 Operand::Reg(Reg::Bx)),
+                                 Operand::Reg(Reg::Bx), 4),
             Instruction::src_dst(Command::Sub,
                                  Operand::ImmU16(5000),
-                                 Operand::Reg(Reg::Bx)),
+                                 Operand::Reg(Reg::Bx), 4),
             Instruction::src_dst(Command::Mov,
                                  Operand::ImmU16(1),
-                                 Operand::Reg(Reg::Bx)),
+                                 Operand::Reg(Reg::Bx), 4),
             Instruction::src_dst(Command::Mov,
                                  Operand::ImmU16(100),
-                                 Operand::Reg(Reg::Cx)),
+                                 Operand::Reg(Reg::Cx), 4),
             Instruction::src_dst(Command::Add,
                                  Operand::Reg(Reg::Cx),
-                                 Operand::Reg(Reg::Bx)),
+                                 Operand::Reg(Reg::Bx), 4),
             Instruction::src_dst(Command::Mov,
                                  Operand::ImmU16(10),
-                                 Operand::Reg(Reg::Dx)),
+                                 Operand::Reg(Reg::Dx), 4),
             Instruction::src_dst(Command::Sub,
                                  Operand::Reg(Reg::Dx),
-                                 Operand::Reg(Reg::Cx)),
+                                 Operand::Reg(Reg::Cx), 4),
             Instruction::src_dst(Command::Add,
                                  Operand::ImmU16(40000),
-                                 Operand::Reg(Reg::Bx)),
+                                 Operand::Reg(Reg::Bx), 4),
             Instruction::src_dst(Command::Add,
                                  Operand::ImmU8((-90 as i8) as u8),
-                                 Operand::Reg(Reg::Cx)),
+                                 Operand::Reg(Reg::Cx), 4),
             Instruction::src_dst(Command::Mov,
                                  Operand::ImmI16(99),
-                                 Operand::Reg(Reg::Sp)),
+                                 Operand::Reg(Reg::Sp), 4),
             Instruction::src_dst(Command::Mov,
                                  Operand::ImmI16(98),
-                                 Operand::Reg(Reg::Bp)),
+                                 Operand::Reg(Reg::Bp), 4),
             Instruction::src_dst(Command::Cmp,
                                  Operand::Reg(Reg::Sp),
-                                 Operand::Reg(Reg::Bp)),
+                                 Operand::Reg(Reg::Bp), 4),
         ];
         m.execute(&instructions);
         assert_eq!(m.reg_value(Reg::Ax), 0x0000);
@@ -3525,60 +3551,60 @@ mod test {
     #[test]
     fn test_deocde_arithmetic(){
         assert_eq!(decode_instruction(&[0x81, 0xc3, 0x30, 0x75]),
-                   Ok((4, Instruction::src_dst(Command::Add,
-                                               Operand::ImmU16(30000),
-                                               Operand::Reg(Reg::Bx)))));
+                   Ok(Instruction::src_dst(Command::Add,
+                                           Operand::ImmU16(30000),
+                                           Operand::Reg(Reg::Bx), 4)));
         assert_eq!(decode_instruction(&[0x81, 0xc3, 0x10, 0x27]),
-                   Ok((4, Instruction::src_dst(Command::Add,
-                                               Operand::ImmU16(10000),
-                                               Operand::Reg(Reg::Bx)))));
+                   Ok(Instruction::src_dst(Command::Add,
+                                           Operand::ImmU16(10000),
+                                           Operand::Reg(Reg::Bx), 4)));
         assert_eq!(decode_instruction(&[0x81, 0xeb, 0x88, 0x13]),
-                   Ok((4, Instruction::src_dst(Command::Sub,
-                                               Operand::ImmU16(5000),
-                                               Operand::Reg(Reg::Bx)))));
+                   Ok(Instruction::src_dst(Command::Sub,
+                                           Operand::ImmU16(5000),
+                                           Operand::Reg(Reg::Bx), 4)));
         assert_eq!(decode_instruction(&[0x81, 0xeb, 0x88, 0x13]),
-                   Ok((4, Instruction::src_dst(Command::Sub,
-                                               Operand::ImmU16(5000),
-                                               Operand::Reg(Reg::Bx)))));
+                   Ok(Instruction::src_dst(Command::Sub,
+                                           Operand::ImmU16(5000),
+                                           Operand::Reg(Reg::Bx), 4)));
         assert_eq!(decode_instruction(&[0xbb, 0x01, 0x00]),
-                   Ok((3, Instruction::src_dst(Command::Mov,
-                                               Operand::ImmI16(1),
-                                               Operand::Reg(Reg::Bx)))));
+                   Ok(Instruction::src_dst(Command::Mov,
+                                           Operand::ImmI16(1),
+                                           Operand::Reg(Reg::Bx), 3)));
         assert_eq!(decode_instruction(&[0xb9, 0x64, 0x00]),
-                   Ok((3, Instruction::src_dst(Command::Mov,
-                                               Operand::ImmI16(100),
-                                               Operand::Reg(Reg::Cx)))));
+                   Ok(Instruction::src_dst(Command::Mov,
+                                           Operand::ImmI16(100),
+                                           Operand::Reg(Reg::Cx), 3)));
         assert_eq!(decode_instruction(&[0x01, 0xcb]),
-                   Ok((2, Instruction::src_dst(Command::Add,
-                                               Operand::Reg(Reg::Cx),
-                                               Operand::Reg(Reg::Bx)))));
+                   Ok(Instruction::src_dst(Command::Add,
+                                           Operand::Reg(Reg::Cx),
+                                           Operand::Reg(Reg::Bx), 2)));
         assert_eq!(decode_instruction(&[0xba, 0x0a, 0x00]),
-                   Ok((3, Instruction::src_dst(Command::Mov,
-                                               Operand::ImmI16(10),
-                                               Operand::Reg(Reg::Dx)))));
+                   Ok(Instruction::src_dst(Command::Mov,
+                                           Operand::ImmI16(10),
+                                           Operand::Reg(Reg::Dx), 3)));
         assert_eq!(decode_instruction(&[0x29, 0xd1]),
-                   Ok((2, Instruction::src_dst(Command::Sub,
-                                               Operand::Reg(Reg::Dx),
-                                               Operand::Reg(Reg::Cx)))));
+                   Ok(Instruction::src_dst(Command::Sub,
+                                           Operand::Reg(Reg::Dx),
+                                           Operand::Reg(Reg::Cx), 2)));
         assert_eq!(decode_instruction(&[0x81, 0xc3, 0x40, 0x9c]),
-                   Ok((4, Instruction::src_dst(Command::Add,
-                                               Operand::ImmU16(40000),
-                                               Operand::Reg(Reg::Bx)))));
+                   Ok(Instruction::src_dst(Command::Add,
+                                           Operand::ImmU16(40000),
+                                           Operand::Reg(Reg::Bx), 4)));
         assert_eq!(decode_instruction(&[0x83, 0xc1, 0xa6]),
-                   Ok((3, Instruction::src_dst(Command::Add,
-                                               Operand::ImmU8((-90 as i8) as u8),
-                                               Operand::Reg(Reg::Cx)))));
+                   Ok(Instruction::src_dst(Command::Add,
+                                           Operand::ImmU8((-90 as i8) as u8),
+                                           Operand::Reg(Reg::Cx), 3)));
         assert_eq!(decode_instruction(&[0xbc, 0x63, 0x00]),
-                   Ok((3, Instruction::src_dst(Command::Mov,
-                                               Operand::ImmI16(99),
-                                               Operand::Reg(Reg::Sp)))));
+                   Ok(Instruction::src_dst(Command::Mov,
+                                           Operand::ImmI16(99),
+                                           Operand::Reg(Reg::Sp), 3)));
         assert_eq!(decode_instruction(&[0xbd, 0x62, 0x00]),
-                   Ok((3, Instruction::src_dst(Command::Mov,
-                                               Operand::ImmI16(98),
-                                               Operand::Reg(Reg::Bp)))));
+                   Ok(Instruction::src_dst(Command::Mov,
+                                           Operand::ImmI16(98),
+                                           Operand::Reg(Reg::Bp), 3)));
         assert_eq!(decode_instruction(&[0x39, 0xe5]),
-                   Ok((2, Instruction::src_dst(Command::Cmp,
-                                               Operand::Reg(Reg::Sp),
-                                               Operand::Reg(Reg::Bp)))));
+                   Ok(Instruction::src_dst(Command::Cmp,
+                                           Operand::Reg(Reg::Sp),
+                                           Operand::Reg(Reg::Bp), 2)));
     }
 }
