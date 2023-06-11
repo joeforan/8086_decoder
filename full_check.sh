@@ -5,6 +5,9 @@ set -euo pipefail
 ./build.sh
 
 BASEDIR=$(realpath $(dirname $0))
+if [ -z ${1+x} ]; then
+    echo "Usage: ./full_check.sh file"
+fi
 TEST_FILE=${1}
 TMP_DIR=$(mktemp -d --tmpdir=${BASEDIR}/tmp)
 TMP_FILE=${TMP_DIR}/test.asm
