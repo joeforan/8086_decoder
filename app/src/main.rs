@@ -820,7 +820,69 @@ impl Machine {
 
     }
 
-    fn get_op_value(&self, operand: Option<Operand>) -> Result<u16, String> {
+    fn read_word_from_memory(&self, adr: u16) -> u16 {
+        (self.memory[adr as usize] as u16) | ((self.memory[adr as usize + 1] as u16) << 8)
+    }
+
+    fn write_word_to_memory(&mut self, adr: u16, value: u16) {
+        self.memory[adr as usize] = (value & 0x00FF) as u8;
+        self.memory[adr as usize + 1] = ((value & 0xFF00) >> 8) as u8;
+    }
+
+    fn get_mem_adr_from_ptr_disp(&self, reg: AdrReg, disp: i16) -> usize {
+        let reg_value = match reg {
+            AdrReg::BxSi => self.reg_value(Reg::Bx) + self.reg_value(Reg::Si),
+            AdrReg::BxDi => self.reg_value(Reg::Bx) + self.reg_value(Reg::Di),
+            AdrReg::BpSi => self.reg_value(Reg::Bp) + self.reg_value(Reg::Si),
+            AdrReg::BpDi => self.reg_value(Reg::Bp) + self.reg_value(Reg::Di),
+            AdrReg::Si => self.reg_value(Reg::Si),
+            AdrReg::Di => self.reg_value(Reg::Di),
+            AdrReg::Bp => self.reg_value(Reg::Bp),
+            AdrReg::Bx => self.reg_value(Reg::Bx)
+        } as usize;
+        reg_value + (disp as usize)
+    }
+
+    fn read_memory_from_ptr_disp(&self, reg: AdrReg, disp: i16, size_op: Option<DataSize>) -> Result<u16, String> {
+        let adr = self.get_mem_adr_from_ptr_disp(reg, disp);
+        match size_op {
+            Some(size) => {
+                match size {
+                    DataSize::Word => {
+                        Ok((self.memory[adr] as u16) |((self.memory[adr+1] as u16) << 8))
+                    },
+                    DataSize::Byte => {
+                        Ok(self.memory[adr] as u16)
+                    }
+                }
+            },
+            None => { Err(String::from("data size should be specified when reading from memory")) }
+        }
+    }
+
+    fn write_to_ptr_disp_memory(&mut self, value: u16, reg: AdrReg, disp: i16, size_op: Option<DataSize>) -> Result<(), String>
+    {
+        let adr = self.get_mem_adr_from_ptr_disp(reg, disp);
+        match size_op {
+            Some(size) => {
+                match size {
+                    DataSize::Word => {
+                        let lb = (value & 0x00FF) as u8;
+                        let hb = ((value & 0xFF00) >> 8) as u8;
+                        self.memory[adr] = lb;
+                        self.memory[adr+1] = hb;
+                    },
+                    DataSize::Byte => {
+                        self.memory[adr] = (value & 0x00FF) as u8;
+                    }
+                }
+                Ok(())
+            },
+            None => { Err(String::from("data size should be specified when reading from memory")) }
+        }
+    }
+
+    fn get_op_value(&self, operand: Option<Operand>, size_op: Option<DataSize>) -> Result<u16, String> {
         use Operand::*;
         match operand {
             Some(o) => {
@@ -831,6 +893,18 @@ impl Machine {
                     ImmU16(v) => Ok(v as u16),
                     ImmI16(v) => Ok(v as u16),
                     SegReg(sr) => { Ok(self.seg_reg_value(sr)) },
+                    PtrDir(adr) => {
+                        match size_op {
+                            Some(size) => {
+                                match size {
+                                    DataSize::Byte => Ok(self.memory[adr as usize] as u16),
+                                    DataSize::Word => Ok(self.read_word_from_memory(adr))
+                                }
+                            },
+                            None => Ok(self.read_word_from_memory(adr))
+                        }
+                    }
+                    PtrDisp(disp) => self.read_memory_from_ptr_disp(disp.0, disp.1, size_op),
                     _ => Err(String::from(format!("Invalid src for mov command: {:?}", o)))
                 }
             },
@@ -843,12 +917,28 @@ impl Machine {
     {
         //assert!(instruction.cmd == Command::Mov);
         use Operand::*;
-        let src_value = self.get_op_value(instruction.op2)?;
+        let src_value = self.get_op_value(instruction.op2, instruction.size)?;
         match instruction.op1 {
             Some(o) => {
                 match o {
                     Reg(r) => {self.write_reg(r, src_value);},
                     SegReg(sr) => {self.write_seg_reg(sr, src_value);},
+                    PtrDisp(disp) => {
+                        return self.write_to_ptr_disp_memory(src_value, disp.0, disp.1, instruction.size);
+                    }
+                    PtrDir(adr) => {
+                        match instruction.size {
+                            Some(sz) => {
+                                match sz {
+                                    DataSize::Byte => {
+                                        self.memory[adr as usize] = src_value as u8;
+                                    },
+                                    DataSize::Word => { self.write_word_to_memory(adr, src_value); }
+                                }
+                            },
+                            None => { self.write_word_to_memory(adr, src_value); }
+                        }
+                    },
                     _ => { return Err(String::from(format!("Invalid dst for mov command: {:?}", o))); }
                 }
             }
@@ -861,7 +951,7 @@ impl Machine {
     {
         use Operand::*;
         use Command::*;
-        let src_value = self.get_op_value(instruction.op2)?;
+        let src_value = self.get_op_value(instruction.op2, instruction.size)?;
         let (aux, res) = match instruction.op1{
             Some(o) => {
                 match o {
@@ -1950,7 +2040,7 @@ fn decode_from_data(data: &[u8]) -> Result<(String, Vec<Instruction>), String> {
 fn run_emulation(path: &String, debug: bool) -> Result<(), String>
 {
     match read(path) {
-        Err(e) => {return Err(String::from(format!("Failure to read binary data from {}", path)));},
+        Err(_) => {return Err(String::from(format!("Failure to read binary data from {}", path)));},
         Ok(data) => {
             let mut m = Machine::new();
             m.set_mem(0, &data);
@@ -1987,9 +2077,12 @@ fn main() {
     }
     if emulate {
         println!("Running emulation of {}", binary_file);
-        run_emulation(binary_file, debug);
+        match run_emulation(binary_file, debug){
+            Err(e) => {println!("Error running emulation: {}", e);}
+            _ => {}
+        }
     } else {
-        let (code_str, instructions) = match decode_from_file(&binary_file) {
+        let (code_str, _) = match decode_from_file(&binary_file) {
             Ok(r) => r,
             Err(e) => {println!("Error: {}", e); return;}
         };
@@ -3848,4 +3941,48 @@ mod test {
         assert_eq!(m.read_flag(Flag::Carry), FlagValue::Set);
         assert_eq!(m.read_flag(Flag::Auxillary), FlagValue::Set);
     }
+
+    #[test]
+    fn test_set_mem_moves(){
+        let mem = [ 0xc7, 0x06, 0xe8, 0x03,
+                    0x01, 0x00, 0xc7, 0x06,
+                    0xea, 0x03, 0x02, 0x00,
+                    0xc7, 0x06, 0xec, 0x03,
+                    0x03, 0x00, 0xc7, 0x06,
+                    0xee, 0x03, 0x04, 0x00,
+                    0xbb, 0xe8, 0x03, 0xc7,
+                    0x47, 0x04, 0x0a, 0x00,
+                    0x8b, 0x1e, 0xe8, 0x03,
+                    0x8b, 0x0e, 0xea, 0x03,
+                    0x8b, 0x16, 0xec, 0x03,
+                    0x8b, 0x2e, 0xee, 0x03
+        ];
+        let mut m: Machine = Machine::new();
+        m.debug(true);
+        m.set_mem(0, &mem);
+        m.set_stop_adr(mem.len());
+        m.run();
+
+        assert_eq!(m.reg_value(Reg::Ax), 0x0000);
+        assert_eq!(m.reg_value(Reg::Bx), 0x0001);
+        assert_eq!(m.reg_value(Reg::Cx), 0x0002);
+        assert_eq!(m.reg_value(Reg::Dx), 0x000a);
+        assert_eq!(m.reg_value(Reg::Sp), 0x0000);
+        assert_eq!(m.reg_value(Reg::Bp), 0x0004);
+        assert_eq!(m.reg_value(Reg::Si), 0x0000);
+        assert_eq!(m.reg_value(Reg::Di), 0x0000);
+        assert_eq!(m.seg_reg_value(SegReg::Cs), 0x0000);
+        assert_eq!(m.seg_reg_value(SegReg::Ds), 0x0000);
+        assert_eq!(m.seg_reg_value(SegReg::Es), 0x0000);
+        assert_eq!(m.seg_reg_value(SegReg::Ss), 0x0000);
+
+        assert_eq!(m.read_ip(), 0x0030);
+
+        assert_eq!(m.read_flag(Flag::Zero), FlagValue::Reset);
+        assert_eq!(m.read_flag(Flag::Sign), FlagValue::Reset);
+        assert_eq!(m.read_flag(Flag::Parity), FlagValue::Reset);
+        assert_eq!(m.read_flag(Flag::Carry), FlagValue::Reset);
+        assert_eq!(m.read_flag(Flag::Auxillary), FlagValue::Reset);
+    }
+
 }
