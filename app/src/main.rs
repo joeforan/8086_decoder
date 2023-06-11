@@ -644,7 +644,9 @@ struct Machine {
     seg_regs: [u16; 4],
     flags: u16,
     ip: usize,
-    memory: [u8; 64*1024]
+    memory: [u8; 64*1024],
+    stop_adr: Option<usize>,
+    debug_mode: bool
 }
 
 impl Machine {
@@ -653,8 +655,14 @@ impl Machine {
                   seg_regs: [0; 4],
                   flags: 0,
                   ip: 0,
-                  memory: [0; 64*1024]
+                  memory: [0; 64*1024],
+                  stop_adr: None,
+                  debug_mode: false
         }
+    }
+
+    fn debug(&mut self, mode: bool) {
+        self.debug_mode = mode;
     }
 
     fn set_mem(&mut self, adr: usize, contents: &[u8]) {
@@ -666,12 +674,38 @@ impl Machine {
         self.memory[adr..end_adr].copy_from_slice(contents);
     }
 
+    fn set_stop_adr(&mut self, adr: usize) {
+        self.stop_adr = Some(adr)
+    }
+
     fn run(&mut self){
         loop {
+            if self.stop_adr.is_some() && self.ip >= self.stop_adr.unwrap() {
+                break;
+            }
             match decode_instruction(&mut self.memory[self.ip..64*1024]) {
                 Ok(instruction) => {
-                    self.execute_single_instruction(&instruction);
-                    self.ip += instruction.code_len as usize;
+                    if self.debug_mode {
+                        println!("-------------------");
+                        println!("{}", instruction.to_str(None));
+                    }
+                    let res = self.execute_single_instruction(&instruction);
+                    match res {
+                        Ok(_) => {
+                            self.ip += instruction.code_len as usize;
+                        },
+                        Err(s) => {
+                            if self.debug_mode {
+                                println!("{}", s);
+                            }
+                        }
+                    }
+                    if self.debug_mode {
+                        println!("");
+                        self.print_status();
+                        println!("-------------------");
+                        println!("");
+                    }
                 },
                 Err(_) => { break; }
             }
@@ -863,6 +897,25 @@ impl Machine {
         Ok(())
     }
 
+    fn execute_jump(&mut self, instruction: &Instruction) -> Result<(), String>
+    {
+        match instruction.cmd {
+            Command::Jnz => {
+                if self.read_flag(Flag::Zero) == FlagValue::Reset {
+                    let offset_res = instruction.offset();
+                    match offset_res {
+                        Some(offset) => {
+                            self.ip = ((self.ip as isize) + offset) as usize;
+                        },
+                        None => {return Err(String::from(format!("Couldn't read offset")));}
+                    }
+                }
+                Ok(())
+            },
+            _ => Err(String::from(format!("Could not execute instruction")))
+        }
+    }
+
     fn execute_single_instruction(&mut self, instruction: &Instruction) -> Result<(), String>
     {
         match instruction.cmd {
@@ -870,9 +923,11 @@ impl Machine {
             Command::Add |
             Command::Sub |
             Command::Cmp => self.execute_arithmetic_instruction(instruction),
+            Command::Jnz => self.execute_jump(instruction),
             _ => Err(String::from(format!("Could not execute instruction {}", instruction.to_str(None))))
         }
     }
+
 
     fn execute(&mut self, instructions: &Vec<Instruction>) -> Result<(), String>
     {
@@ -898,6 +953,8 @@ impl Machine {
         println!("Ds: 0x{:x}", self.seg_regs[1]);
         println!("Es: 0x{:x}", self.seg_regs[2]);
         println!("Ss: 0x{:x}", self.seg_regs[3]);
+
+        println!("Ip: 0x{:x}", self.ip);
 
         let mut flag_str = String::from("");
         if self.read_flag(Flag::Carry) == FlagValue::Set { flag_str.push_str("C");}
@@ -1865,10 +1922,19 @@ fn decode_from_data(data: &[u8]) -> Result<(String, Vec<Instruction>), String> {
     Ok((ret, inst_vec))
 }
 
-fn run_emulation(instructions: &Vec<Instruction>) {
-    let mut m = Machine::new();
-    m.execute(instructions);
-    m.print_status();
+fn run_emulation(path: &String) -> Result<(), String>
+{
+    match read(path) {
+        Err(e) => {return Err(String::from(format!("Failure to read binary data from {}", path)));},
+        Ok(data) => {
+            let mut m = Machine::new();
+            m.set_mem(0, &data);
+            m.set_stop_adr(data.len());
+            m.run();
+            m.print_status();
+            Ok(())
+        }
+    }
 }
 
 fn main() {
@@ -1886,13 +1952,13 @@ fn main() {
             binary_file = arg
         }
     }
-    let (code_str, instructions) = match decode_from_file(&binary_file) {
-        Ok(r) => r,
-        Err(e) => {println!("Error: {}", e); return;}
-    };
     if emulate {
-        run_emulation(&instructions);
+        run_emulation(binary_file);
     } else {
+        let (code_str, instructions) = match decode_from_file(&binary_file) {
+            Ok(r) => r,
+            Err(e) => {println!("Error: {}", e); return;}
+        };
         println!("{}", code_str)
     }
 }
@@ -3653,6 +3719,7 @@ mod test {
         let mem = [0xb9, 0xc8, 0x00, 0x89, 0xcb, 0x81, 0xc1, 0xe8, 0x03, 0xbb, 0xd0, 0x07, 0x29, 0xd9];
         let mut m: Machine = Machine::new();
         m.set_mem(0, &mem);
+        m.set_stop_adr(mem.len());
         m.run();
 
         assert_eq!(m.reg_value(Reg::Ax), 0x0000);
@@ -3676,5 +3743,37 @@ mod test {
         assert_eq!(m.read_flag(Flag::Carry), FlagValue::Set);
         assert_eq!(m.read_flag(Flag::Auxillary), FlagValue::Reset);
 
+    }
+
+    #[test]
+    fn test_set_mem_and_decode_with_jumps(){
+        let mem = [0xb9, 0x03, 0x00, 0xbb, 0xe8, 0x03, 0x83, 0xc3,
+                   0x0a, 0x83, 0xe9, 0x01, 0x75, 0xf8];
+        let mut m: Machine = Machine::new();
+        m.debug(true);
+        m.set_mem(0, &mem);
+        m.set_stop_adr(mem.len());
+        m.run();
+
+        assert_eq!(m.reg_value(Reg::Ax), 0x0000);
+        assert_eq!(m.reg_value(Reg::Bx), 0x0406);
+        assert_eq!(m.reg_value(Reg::Cx), 0x0000);
+        assert_eq!(m.reg_value(Reg::Dx), 0x0000);
+        assert_eq!(m.reg_value(Reg::Sp), 0x0000);
+        assert_eq!(m.reg_value(Reg::Bp), 0x0000);
+        assert_eq!(m.reg_value(Reg::Si), 0x0000);
+        assert_eq!(m.reg_value(Reg::Di), 0x0000);
+        assert_eq!(m.seg_reg_value(SegReg::Cs), 0x0000);
+        assert_eq!(m.seg_reg_value(SegReg::Ds), 0x0000);
+        assert_eq!(m.seg_reg_value(SegReg::Es), 0x0000);
+        assert_eq!(m.seg_reg_value(SegReg::Ss), 0x0000);
+
+        assert_eq!(m.read_ip(), 0x000E);
+
+        assert_eq!(m.read_flag(Flag::Zero), FlagValue::Set);
+        assert_eq!(m.read_flag(Flag::Sign), FlagValue::Reset);
+        assert_eq!(m.read_flag(Flag::Parity), FlagValue::Set);
+        assert_eq!(m.read_flag(Flag::Carry), FlagValue::Reset);
+        assert_eq!(m.read_flag(Flag::Auxillary), FlagValue::Reset);
     }
 }
