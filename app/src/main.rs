@@ -698,6 +698,7 @@ impl Machine {
                             if self.debug_mode {
                                 println!("{}", s);
                             }
+                            return;
                         }
                     }
                     if self.debug_mode {
@@ -899,21 +900,29 @@ impl Machine {
 
     fn execute_jump(&mut self, instruction: &Instruction) -> Result<(), String>
     {
-        match instruction.cmd {
-            Command::Jnz => {
-                if self.read_flag(Flag::Zero) == FlagValue::Reset {
-                    let offset_res = instruction.offset();
-                    match offset_res {
-                        Some(offset) => {
-                            self.ip = ((self.ip as isize) + offset) as usize;
-                        },
-                        None => {return Err(String::from(format!("Couldn't read offset")));}
-                    }
-                }
-                Ok(())
+        let condition = match instruction.cmd {
+            Command::Loopnz => {
+                let cx_value = self.reg_value(Reg::Cx) -1;
+                self.write_reg(Reg::Cx, cx_value);
+                cx_value != 0
             },
-            _ => Err(String::from(format!("Could not execute instruction")))
+            Command::Jnz => self.read_flag(Flag::Zero) == FlagValue::Reset,
+            Command::Je => self.read_flag(Flag::Zero) == FlagValue::Set,
+            Command::Jp => self.read_flag(Flag::Parity) == FlagValue::Set,
+            Command::Jb => self.read_flag(Flag::Carry) == FlagValue::Set,
+            _ => { return Err(String::from(format!("Could not execute instruction"))); }
+        };
+
+        if condition {
+            let offset_res = instruction.offset();
+            match offset_res {
+                Some(offset) => {
+                    self.ip = ((self.ip as isize) + offset) as usize;
+                },
+                None => {return Err(String::from(format!("Couldn't read offset")));}
+            }
         }
+        Ok(())
     }
 
     fn execute_single_instruction(&mut self, instruction: &Instruction) -> Result<(), String>
@@ -923,7 +932,23 @@ impl Machine {
             Command::Add |
             Command::Sub |
             Command::Cmp => self.execute_arithmetic_instruction(instruction),
-            Command::Jnz => self.execute_jump(instruction),
+            Command::Jo |
+            Command::Jno |
+            Command::Jb |
+            Command::Jnb |
+            Command::Je |
+            Command::Jnz |
+            Command::Jbe |
+            Command::Ja |
+            Command::Js |
+            Command::Jns |
+            Command::Jp |
+            Command::Jnp |
+            Command::Jl |
+            Command::Jnl |
+            Command::Jle |
+            Command::Jg |
+            Command::Loopnz => self.execute_jump(instruction),
             _ => Err(String::from(format!("Could not execute instruction {}", instruction.to_str(None))))
         }
     }
@@ -1922,7 +1947,7 @@ fn decode_from_data(data: &[u8]) -> Result<(String, Vec<Instruction>), String> {
     Ok((ret, inst_vec))
 }
 
-fn run_emulation(path: &String) -> Result<(), String>
+fn run_emulation(path: &String, debug: bool) -> Result<(), String>
 {
     match read(path) {
         Err(e) => {return Err(String::from(format!("Failure to read binary data from {}", path)));},
@@ -1930,6 +1955,10 @@ fn run_emulation(path: &String) -> Result<(), String>
             let mut m = Machine::new();
             m.set_mem(0, &data);
             m.set_stop_adr(data.len());
+            if debug {
+                println!("Setting debug mode!")
+            }
+            m.debug(debug);
             m.run();
             m.print_status();
             Ok(())
@@ -1944,16 +1973,21 @@ fn main() {
         return;
     }
     let mut emulate = false;
+    let mut debug = false;
     let mut binary_file = &String::from("");
     for arg in &args[1..] {
         if arg == "--emulate" {
             emulate = true
-        } else {
+        } else if arg == "--do-debug" {
+            debug = true;
+        }else {
             binary_file = arg
         }
+
     }
     if emulate {
-        run_emulation(binary_file);
+        println!("Running emulation of {}", binary_file);
+        run_emulation(binary_file, debug);
     } else {
         let (code_str, instructions) = match decode_from_file(&binary_file) {
             Ok(r) => r,
@@ -3775,5 +3809,43 @@ mod test {
         assert_eq!(m.read_flag(Flag::Parity), FlagValue::Set);
         assert_eq!(m.read_flag(Flag::Carry), FlagValue::Reset);
         assert_eq!(m.read_flag(Flag::Auxillary), FlagValue::Reset);
+    }
+
+    #[test]
+    fn test_set_mem_and_decode_with_jumps2(){
+        let mem = [0xb8, 0x0a, 0x00, 0xbb,
+                   0x0a, 0x00, 0xb9, 0x0a,
+                   0x00, 0x39, 0xcb, 0x74,
+                   0x05, 0x83, 0xc0, 0x01,
+                   0x7a, 0x05, 0x83, 0xeb,
+                   0x05, 0x72, 0x03, 0x83,
+                   0xe9, 0x02, 0xe0, 0xed
+        ];
+        let mut m: Machine = Machine::new();
+        m.debug(true);
+        m.set_mem(0, &mem);
+        m.set_stop_adr(mem.len());
+        m.run();
+
+        assert_eq!(m.reg_value(Reg::Ax), 0x000d);
+        assert_eq!(m.reg_value(Reg::Bx), 0xFFFB);
+        assert_eq!(m.reg_value(Reg::Cx), 0x0000);
+        assert_eq!(m.reg_value(Reg::Dx), 0x0000);
+        assert_eq!(m.reg_value(Reg::Sp), 0x0000);
+        assert_eq!(m.reg_value(Reg::Bp), 0x0000);
+        assert_eq!(m.reg_value(Reg::Si), 0x0000);
+        assert_eq!(m.reg_value(Reg::Di), 0x0000);
+        assert_eq!(m.seg_reg_value(SegReg::Cs), 0x0000);
+        assert_eq!(m.seg_reg_value(SegReg::Ds), 0x0000);
+        assert_eq!(m.seg_reg_value(SegReg::Es), 0x0000);
+        assert_eq!(m.seg_reg_value(SegReg::Ss), 0x0000);
+
+        assert_eq!(m.read_ip(), 0x001C);
+
+        assert_eq!(m.read_flag(Flag::Zero), FlagValue::Reset);
+        assert_eq!(m.read_flag(Flag::Sign), FlagValue::Set);
+        assert_eq!(m.read_flag(Flag::Parity), FlagValue::Reset);
+        assert_eq!(m.read_flag(Flag::Carry), FlagValue::Set);
+        assert_eq!(m.read_flag(Flag::Auxillary), FlagValue::Set);
     }
 }
